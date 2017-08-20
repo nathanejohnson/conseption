@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/hashicorp/consul/api"
 	cons "github.com/myENA/consultant"
@@ -22,17 +24,22 @@ const ConsulPort = 8500
 func main() {
 
 	cspt := conseption{
-		conf: api.DefaultConfig(),
-		me:   os.Getenv("HOSTNAME"),
+		conf:  api.DefaultConfig(),
+		me:    os.Getenv("HOSTNAME"),
+		cache: make(map[string][]byte),
 	}
 	var err error
 
-	fmt.Printf("me: %s\n", cspt.me)
 	cspt.cc, err = cons.NewClient(cspt.conf)
 
 	if err != nil {
 		fatalf("Error connecting to consul: %s\n", err)
 		os.Exit(1)
+	}
+
+	cspt.node, err = cspt.cc.Agent().NodeName()
+	if err != nil {
+		fatalf("Cannot determine node name")
 	}
 
 	// make prefix configurable
@@ -53,8 +60,7 @@ func main() {
 			fmt.Printf("got error querying catalog: %s\n", err)
 		}
 		for _, cs := range css {
-			if cs.ServiceAddress == cspt.me && cs.Node != cspt.me {
-				err = cspt.deregRemote(cs)
+			if cs.ServiceAddress == cspt.me && cs.Node != cspt.node {
 				if err != nil {
 					fmt.Printf("got error derigstering: %s\n", err)
 				}
@@ -72,9 +78,12 @@ func main() {
 }
 
 type conseption struct {
-	conf *api.Config
-	cc   *cons.Client
-	me   string
+	sync.Mutex
+	conf  *api.Config
+	cc    *cons.Client
+	me    string
+	node  string
+	cache map[string][]byte
 }
 
 type services struct {
@@ -102,13 +111,18 @@ func (cspt *conseption) deregRemote(se *api.CatalogService) error {
 }
 
 func (cspt *conseption) handler(idx uint64, raw interface{}) {
+	cspt.Lock()
+	defer cspt.Unlock()
 	kvps, ok := raw.(api.KVPairs)
 	var svcs []*api.AgentServiceRegistration
 	if !ok {
 		fmt.Println("not KVPairs!")
 		return
 	}
+	news := make(map[string]bool)
+
 	for _, kvp := range kvps {
+		fmt.Printf("handling %s\n", kvp.Key)
 		s, err := parseServiceRegs(kvp.Value)
 		if err != nil {
 			fmt.Printf("error parsing service reg: %s\n", err)
@@ -118,17 +132,43 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 		}
 		for _, svc := range s {
 			if svc.Address == cspt.me {
+				h := md5.Sum(kvp.Value)
+				if ch, ok := cspt.cache[svc.ID]; ok {
+					if bytes.Compare(ch, h[:]) == 0 {
+						// no change
+						news[svc.ID] = false
+						continue
+					}
+				}
+				news[svc.ID] = true
 				svcs = append(svcs, svc)
+				cspt.cache[svc.ID] = h[:]
 			}
 		}
 	}
-	err := cspt.deregisterAllLocalServices()
-	if err != nil {
-		fmt.Printf("error deregistering services: %s\n", err)
+	var deregs []string
+	for k := range cspt.cache {
+		if u, ok := news[k]; ok {
+			if u {
+				deregs = append(deregs, k)
+			}
+		} else {
+			deregs = append(deregs, k)
+			delete(cspt.cache, k)
+		}
 	}
+
+	for _, dr := range deregs {
+		fmt.Printf("deregistering %s\n", dr)
+		err := cspt.cc.Agent().ServiceDeregister(dr)
+		if err != nil {
+			fmt.Printf("got error deregistering %s: %s\n", dr, err)
+		}
+	}
+
 	for _, svc := range svcs {
 		var err error
-		fmt.Printf("I'm totally registering %s\n", svc.ID)
+		fmt.Printf("registering %s\n", svc.ID)
 		err = cspt.cc.Agent().ServiceRegister(svc)
 		if err != nil {
 			fmt.Printf("error returned from registering service: %s\n", err)
