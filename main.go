@@ -184,10 +184,10 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 
 			err = jd.Decode(s)
 			if err != nil {
-				if err != io.EOF {
-					errors = append(errors, fmt.Sprintf("got final error: %s\n", err))
-				} else {
+				if err == io.EOF {
 					err = nil
+				} else {
+					errors = append(errors, fmt.Sprintf("got final error: %s\n", err))
 				}
 				break
 			}
@@ -213,8 +213,8 @@ func (cspt *conseption) deregisterAllLocalServices() error {
 	}
 	var errs []string
 	for _, s := range services {
-		// err = a.ServiceDeregister(s.ID)
-		fmt.Printf("I'd totally derigster %s\n", s.ID)
+		err = a.ServiceDeregister(s.ID)
+		fmt.Printf("deregistering %s\n", s.ID)
 		if err != nil {
 			errs = append(errs, err.Error())
 		}
@@ -222,7 +222,6 @@ func (cspt *conseption) deregisterAllLocalServices() error {
 	if errs != nil {
 		return fmt.Errorf("errors deregistering service: %s", strings.Join(errs, ","))
 	}
-	fmt.Printf("returning from dereg\n")
 	return nil
 }
 
