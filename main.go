@@ -4,14 +4,20 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
-	"reflect"
+	"regexp"
 	"strings"
-	"unsafe"
 
 	"github.com/hashicorp/consul/api"
 	cons "github.com/myENA/consultant"
+	"github.com/nathanejohnson/conseption/putbackreader"
 )
+
+var precomma = regexp.MustCompile(`^\s*,`)
+
+const CONSUL_PORT = 8500
+
 
 func main() {
 
@@ -21,6 +27,7 @@ func main() {
 	}
 	var err error
 
+	fmt.Printf("me: %s\n", cspt.me)
 	cspt.cc, err = cons.NewClient(cspt.conf)
 
 	if err != nil {
@@ -31,6 +38,23 @@ func main() {
 	wkp, err := cspt.cc.WatchKeyPrefix("/services", true, cspt.handler)
 	if err != nil {
 		Fatalf("Error setting up watcher: %s\n", err)
+	}
+
+	svcs, _, err := cspt.cc.Catalog().Services(&api.QueryOptions{AllowStale: true})
+
+	for k, _ := range svcs {
+		css, _, err := cspt.cc.Catalog().Service(k, "", &api.QueryOptions{AllowStale: true})
+		if err != nil {
+			fmt.Printf("got error querying catalog: %s\n", err)
+		}
+		for _, cs := range css {
+			if cs.ServiceAddress == cspt.me && cs.Node != cspt.me {
+				err = cspt.deregRemote(cs)
+				if err != nil {
+					fmt.Printf("got error derigstering: %s\n", err)
+				}
+			}
+		}
 	}
 
 	wkp.Run(cspt.conf.Address)
@@ -47,43 +71,109 @@ type services struct {
 	Services []*api.AgentServiceRegistration
 }
 
+func (cspt *conseption) deregRemote(se *api.CatalogService) error {
+	// shallow copy of conf
+	conf := &api.Config{}
+	*conf = *cspt.conf
+	// get info on the noe
+	cn, _, err := cspt.cc.Catalog().Node(se.Node, nil)
+	if err != nil {
+		return err
+	}
+	conf.Address = fmt.Sprintf("%s:%d", cn.Node.Address, CONSUL_PORT)
+
+	rcc, err := cons.NewClient(conf)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("deregistering %s from %s\n", se.ServiceName, se.Node)
+
+	return rcc.Agent().ServiceDeregister(se.ServiceID)
+}
+
 func (cspt *conseption) handler(idx uint64, raw interface{}) {
-	v := reflect.ValueOf(raw)
-	if v.Kind() == reflect.Slice {
-		t := v.Type()
-		if t.Name() == "KVPairs" {
-			for i := 0; i < v.Len(); i++ {
-				kvp := (*api.KVPair)(unsafe.Pointer(v.Index(i).Pointer()))
-				ss := &services{}
-				err := json.Unmarshal(kvp.Value, ss)
-				if err != nil {
-					// try doing it one at a time
-					err = nil
-					jd := json.NewDecoder(bytes.NewReader(kvp.Value))
-					for jd.More() {
-						s := &api.AgentServiceRegistration{}
-						err = jd.Decode(s)
-						if err != nil {
-							continue
-						}
-						ss.Services = append(ss.Services, s)
-					}
-				}
-
-				_ = cspt.deregisterAllServices() // todo log this
-				for _, svc := range ss.Services {
-					if svc.Address == cspt.me {
-						fmt.Printf("I'd totally register %#v\n", svc)
-						// cspt.cc.Agent().ServiceRegister(svc)
-					}
-				}
-
+	kvps, ok := raw.(api.KVPairs)
+	var svcs []*api.AgentServiceRegistration
+	if !ok {
+		fmt.Println("not KVPairs!")
+		return
+	}
+	for _, kvp := range kvps {
+		s, err := ParseServiceRegs(kvp.Value)
+		if err != nil {
+			fmt.Printf("error parsing service reg: %s\n", err)
+			if s == nil {
+				return
 			}
 		}
-	} else {
-		fmt.Printf("not pointer: %#v\n", raw)
-		fmt.Printf("kind: %s\n", v.Kind().String())
+		for _, svc := range s {
+			if svc.Address == cspt.me {
+				svcs = append(svcs, svc)
+			}
+		}
 	}
+	cspt.deregisterAllServices()
+	for _, svc := range svcs {
+		var err error
+		fmt.Printf("I'm totally registering %s\n", svc.ID)
+		err = cspt.cc.Agent().ServiceRegister(svc)
+		if err != nil {
+			fmt.Printf("error returned from registering service: %s\n", err)
+		}
+	}
+}
+
+func ParseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
+	var errors []string
+	var err error
+	ss := &services{}
+	err = json.Unmarshal(val, ss)
+	buf := new(bytes.Buffer)
+	if err != nil {
+		pbr := putbackreader.NewPutBackReader(bytes.NewReader(val))
+		jd := json.NewDecoder(pbr)
+		for {
+			s := &api.AgentServiceRegistration{}
+			err = jd.Decode(s)
+
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				// Handle the case where we have comma separated json
+				// objects.
+				buf.Reset()
+				buf.ReadFrom(jd.Buffered())
+				b := buf.Bytes()
+				m := precomma.FindIndex(b)
+				if m == nil {
+					errors = append(errors, fmt.Sprintf("bad read: %s\n", string(b)))
+					break
+				}
+
+				// Take the comma off, put the already-read parts of the stream
+				// back, and make a new decoder.  All this work to subtract
+				// a fucking wayward comma from the stream.
+				pbr.SetBackBytes(b[m[1]:])
+				jd = json.NewDecoder(pbr)
+
+				err = jd.Decode(s)
+				if err != nil {
+					errors = append(errors, fmt.Sprintf("got final error: %s\n", err))
+					break
+				}
+			}
+			ss.Services = append(ss.Services, s)
+
+			if !jd.More() {
+				break
+			}
+		}
+	}
+	if len(errors) > 0 {
+		err = fmt.Errorf("Errors: %s", strings.Join(errors, ","))
+	}
+	return ss.Services, err
 }
 
 func (cspt *conseption) deregisterAllServices() error {
@@ -103,6 +193,7 @@ func (cspt *conseption) deregisterAllServices() error {
 	if errs != nil {
 		return fmt.Errorf("errors deregistering service: %s", strings.Join(errs, ","))
 	}
+	fmt.Printf("returning from dereg\n")
 	return nil
 }
 
