@@ -202,7 +202,7 @@ func TestProcessor(t *testing.T) {
 	} {
 		regs, err := parseServiceRegs(p)
 		if err != nil {
-			t.Errorf("parseServiceRegs failed in pass %d: %s\n", i err)
+			t.Errorf("parseServiceRegs failed in pass %d: %s\n", i, err)
 			t.FailNow()
 		}
 		if len(regs) != 5 {
