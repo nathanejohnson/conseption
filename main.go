@@ -139,20 +139,24 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 	var errors []string
 	var err error
+	// Try services struct
 	ss := &services{}
 	err = json.Unmarshal(val, ss)
-	buf := new(bytes.Buffer)
 	if err == nil {
 		return ss.Services, nil
 	}
+
 	// now try a list
 	err = json.Unmarshal(val, &ss.Services)
 	if err == nil {
 		return ss.Services, nil
 	}
+
 	// now try comma separated json objects.
 	pbr := putbackreader.NewPutBackReader(bytes.NewReader(val))
 	jd := json.NewDecoder(pbr)
+	buf := new(bytes.Buffer)
+
 	for {
 		s := &api.AgentServiceRegistration{}
 		err = jd.Decode(s)

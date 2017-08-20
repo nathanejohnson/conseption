@@ -1,4 +1,5 @@
 // Package putbackreader
+//
 // This implements io.Reader, giving you the option to "put back"
 // bytes that were already read.  This is mainly used with a
 // json.Decoder and you're working with json-like serial input where

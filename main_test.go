@@ -194,26 +194,27 @@ var payload2 = []byte(`{
 `)
 
 func TestProcessor(t *testing.T) {
-	for _, p := range [][]byte{payload,
+	for i, p := range [][]byte{
+		payload,
 		[]byte("[" + string(payload) + "]"),
-		[]byte("{\"Services\": [" + string(payload) + "]}"),
+		[]byte("{\"services\": [" + string(payload) + "]}"),
 		payload2,
 	} {
 		regs, err := parseServiceRegs(p)
 		if err != nil {
-			t.Errorf("parseServiceRegs failed: %s\n", err)
+			t.Errorf("parseServiceRegs failed in pass %d: %s\n", i err)
 			t.FailNow()
 		}
 		if len(regs) != 5 {
-			t.Errorf("Invalid length: %d\n", len(regs))
+			t.Errorf("Invalid length: %d in pass %d\n", len(regs), i)
 			t.FailNow()
 		}
 		if regs[0].Address != "cb01.labs.widget.co" {
-			t.Errorf("address mismatch")
+			t.Errorf("address mismatch in pass %d", i)
 			t.Fail()
 		}
 		if regs[4].Name != "couchbase" {
-			t.Errorf("name mismatch")
+			t.Errorf("name mismatch in pass %d", i)
 			t.Fail()
 		}
 
