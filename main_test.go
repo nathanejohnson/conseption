@@ -195,10 +195,11 @@ var payload2 = []byte(`{
 
 func TestProcessor(t *testing.T) {
 	for i, p := range [][]byte{
-		payload,
-		[]byte("[" + string(payload) + "]"),
-		[]byte("{\"services\": [" + string(payload) + "]}"),
-		payload2,
+		payload, // serial json with comma
+		append(payload, []byte(",")[0]),                        // with trailing comma
+		[]byte("[" + string(payload) + "]"),                 // list style
+		[]byte("{\"services\": [" + string(payload) + "]}"), // enclosing json style
+		payload2, // serial json without separator
 	} {
 		regs, err := parseServiceRegs(p)
 		if err != nil {

@@ -184,7 +184,11 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 
 			err = jd.Decode(s)
 			if err != nil {
-				errors = append(errors, fmt.Sprintf("got final error: %s\n", err))
+				if err != io.EOF {
+					errors = append(errors, fmt.Sprintf("got final error: %s\n", err))
+				} else {
+					err = nil
+				}
 				break
 			}
 		}
