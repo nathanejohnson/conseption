@@ -61,6 +61,7 @@ func main() {
 		}
 		for _, cs := range css {
 			if cs.ServiceAddress == cspt.me && cs.Node != cspt.node {
+				err = cspt.deregRemote(cs)
 				if err != nil {
 					fmt.Printf("got error derigstering: %s\n", err)
 				}
@@ -134,7 +135,7 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 			if svc.Address == cspt.me {
 				h := md5.Sum(kvp.Value)
 				if ch, ok := cspt.cache[svc.ID]; ok {
-					if bytes.Compare(ch, h[:]) == 0 {
+					if bytes.Equal(ch, h[:]) {
 						// no change
 						news[svc.ID] = false
 						continue
