@@ -142,47 +142,55 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 	ss := &services{}
 	err = json.Unmarshal(val, ss)
 	buf := new(bytes.Buffer)
-	if err != nil {
-		pbr := putbackreader.NewPutBackReader(bytes.NewReader(val))
-		jd := json.NewDecoder(pbr)
-		for {
-			s := &api.AgentServiceRegistration{}
-			err = jd.Decode(s)
+	if err == nil {
+		return ss.Services, nil
+	}
+	// now try a list
+	err = json.Unmarshal(val, &ss.Services)
+	if err == nil {
+		return ss.Services, nil
+	}
+	// now try comma separated json objects.
+	pbr := putbackreader.NewPutBackReader(bytes.NewReader(val))
+	jd := json.NewDecoder(pbr)
+	for {
+		s := &api.AgentServiceRegistration{}
+		err = jd.Decode(s)
 
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				// Handle the case where we have comma separated json
-				// objects.
-				buf.Reset()
-				_, _ = buf.ReadFrom(jd.Buffered())
-				b := buf.Bytes()
-				m := precomma.FindIndex(b)
-				if m == nil {
-					errors = append(errors, fmt.Sprintf("bad read: %s\n", string(b)))
-					break
-				}
-
-				// Take the comma off, put the already-read parts of the stream
-				// back, and make a new decoder.  All this work to subtract
-				// a fucking wayward comma from the stream.
-				pbr.SetBackBytes(b[m[1]:])
-				jd = json.NewDecoder(pbr)
-
-				err = jd.Decode(s)
-				if err != nil {
-					errors = append(errors, fmt.Sprintf("got final error: %s\n", err))
-					break
-				}
+		if err != nil {
+			if err == io.EOF {
+				break
 			}
-			ss.Services = append(ss.Services, s)
+			// Handle the case where we have comma separated json
+			// objects.
+			buf.Reset()
+			_, _ = buf.ReadFrom(jd.Buffered())
+			b := buf.Bytes()
+			m := precomma.FindIndex(b)
+			if m == nil {
+				errors = append(errors, fmt.Sprintf("bad read: %s\n", string(b)))
+				break
+			}
 
-			if !jd.More() {
+			// Take the comma off, put the already-read parts of the stream
+			// back, and make a new decoder.  All this work to subtract
+			// a fucking wayward comma from the stream.
+			pbr.SetBackBytes(b[m[1]:])
+			jd = json.NewDecoder(pbr)
+
+			err = jd.Decode(s)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("got final error: %s\n", err))
 				break
 			}
 		}
+		ss.Services = append(ss.Services, s)
+
+		if !jd.More() {
+			break
+		}
 	}
+
 	if len(errors) > 0 {
 		err = fmt.Errorf("Errors: %s", strings.Join(errors, ","))
 	}

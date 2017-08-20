@@ -26,7 +26,6 @@ func NewPutBackReader(r io.Reader) *PutBackReader {
 // Read - implements io.Reader.
 func (pbr *PutBackReader) Read(b []byte) (int, error) {
 	var copied int
-
 	if len(pbr.putBack) > 0 {
 		copied = copy(b, pbr.putBack)
 		if len(pbr.putBack) > copied {
