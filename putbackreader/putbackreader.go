@@ -12,7 +12,6 @@ import (
 	"io"
 )
 
-
 // PutBackReader - This implements io.Reader
 type PutBackReader struct {
 	putBack []byte

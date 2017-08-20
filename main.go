@@ -16,8 +16,8 @@ import (
 
 var precomma = regexp.MustCompile(`^\s*,`)
 
-const CONSUL_PORT = 8500
-
+// ConsulPort - the tcp port consul agents listen on.
+const ConsulPort = 8500
 
 func main() {
 
@@ -31,18 +31,23 @@ func main() {
 	cspt.cc, err = cons.NewClient(cspt.conf)
 
 	if err != nil {
-		Fatalf("Error connecting to consul: %s\n", err)
+		fatalf("Error connecting to consul: %s\n", err)
 		os.Exit(1)
 	}
 
+	// make prefix configurable
 	wkp, err := cspt.cc.WatchKeyPrefix("/services", true, cspt.handler)
 	if err != nil {
-		Fatalf("Error setting up watcher: %s\n", err)
+		fatalf("Error setting up watcher: %s\n", err)
+	}
+	svcs, _, err := cspt.cc.Catalog().Services(&api.QueryOptions{AllowStale: true})
+	if err != nil {
+		fatalf("Error querying catalog: %s\n", err)
 	}
 
-	svcs, _, err := cspt.cc.Catalog().Services(&api.QueryOptions{AllowStale: true})
-
-	for k, _ := range svcs {
+	// Go through all services in the catalog, and deregister anything that
+	// should go to the local host agent.
+	for k := range svcs {
 		css, _, err := cspt.cc.Catalog().Service(k, "", &api.QueryOptions{AllowStale: true})
 		if err != nil {
 			fmt.Printf("got error querying catalog: %s\n", err)
@@ -57,7 +62,12 @@ func main() {
 		}
 	}
 
-	wkp.Run(cspt.conf.Address)
+	// Start the runner, which will get an initial full kv dump of everything
+	// under the kv prefix.
+	err = wkp.Run(cspt.conf.Address)
+	if err != nil {
+		fatalf("%s\n", err)
+	}
 
 }
 
@@ -75,12 +85,12 @@ func (cspt *conseption) deregRemote(se *api.CatalogService) error {
 	// shallow copy of conf
 	conf := &api.Config{}
 	*conf = *cspt.conf
-	// get info on the noe
-	cn, _, err := cspt.cc.Catalog().Node(se.Node, nil)
+	// get info on the node
+	cn, _, err := cspt.cc.Catalog().Node(se.Node, &api.QueryOptions{AllowStale: true})
 	if err != nil {
 		return err
 	}
-	conf.Address = fmt.Sprintf("%s:%d", cn.Node.Address, CONSUL_PORT)
+	conf.Address = fmt.Sprintf("%s:%d", cn.Node.Address, ConsulPort)
 
 	rcc, err := cons.NewClient(conf)
 	if err != nil {
@@ -99,7 +109,7 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 		return
 	}
 	for _, kvp := range kvps {
-		s, err := ParseServiceRegs(kvp.Value)
+		s, err := parseServiceRegs(kvp.Value)
 		if err != nil {
 			fmt.Printf("error parsing service reg: %s\n", err)
 			if s == nil {
@@ -112,7 +122,10 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 			}
 		}
 	}
-	cspt.deregisterAllServices()
+	err := cspt.deregisterAllLocalServices()
+	if err != nil {
+		fmt.Printf("error deregistering services: %s\n", err)
+	}
 	for _, svc := range svcs {
 		var err error
 		fmt.Printf("I'm totally registering %s\n", svc.ID)
@@ -123,7 +136,7 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 	}
 }
 
-func ParseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
+func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 	var errors []string
 	var err error
 	ss := &services{}
@@ -143,7 +156,7 @@ func ParseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 				// Handle the case where we have comma separated json
 				// objects.
 				buf.Reset()
-				buf.ReadFrom(jd.Buffered())
+				_, _ = buf.ReadFrom(jd.Buffered())
 				b := buf.Bytes()
 				m := precomma.FindIndex(b)
 				if m == nil {
@@ -176,7 +189,7 @@ func ParseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 	return ss.Services, err
 }
 
-func (cspt *conseption) deregisterAllServices() error {
+func (cspt *conseption) deregisterAllLocalServices() error {
 	a := cspt.cc.Agent()
 	services, err := a.Services()
 	if err != nil {
@@ -197,7 +210,7 @@ func (cspt *conseption) deregisterAllServices() error {
 	return nil
 }
 
-func Fatalf(format string, args ...interface{}) {
+func fatalf(format string, args ...interface{}) {
 	fmt.Printf(format, args)
 	os.Exit(1)
 }
