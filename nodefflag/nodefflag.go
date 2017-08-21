@@ -1,8 +1,10 @@
 // This extends the go flag package to allow for a "no default"
 // variation of standard flag variables.  In order to accomplish this,
 // we have to use pointers to pointers.  If the pp references a nil pointer,
-// the flag was not set.  If the pp references a non-nil, the flag was set,
-// and **ptr contains the value.
+// the flag was not set.  If the pp references a non-nil pointer, the flag
+// was set, and **ptr contains the value.  The pp itself returned will never
+// be nil, and it is expected that the NoDef*Var methods will never receive
+// a nil **.
 package nodefflag
 
 import (
@@ -13,29 +15,29 @@ import (
 
 // implement the Value interface for flags
 type ndsf struct {
-	sv *string
+	sv **string
 }
 
 func (s *ndsf) String() string {
-	if s.sv != nil {
-		return *s.sv
+	if *s.sv != nil {
+		return **s.sv
 	}
 	return ""
 }
 
 func (s *ndsf) Set(val string) error {
-	s.sv = &val
+	*s.sv = &val
 	return nil
 }
 
 type ndbf struct {
-	bv *bool
+	bv **bool
 }
 
 func (b *ndbf) String() string {
 	var ret bool
-	if b.bv != nil {
-		ret = *b.bv
+	if *b.bv != nil {
+		ret = **b.bv
 	}
 	return strconv.FormatBool(ret)
 }
@@ -45,7 +47,7 @@ func (b *ndbf) Set(val string) error {
 	if err != nil {
 		return err
 	}
-	b.bv = &pb
+	*b.bv = &pb
 	return nil
 }
 
@@ -54,12 +56,12 @@ func (b *ndbf) IsBoolFlag() bool {
 }
 
 type ndif struct {
-	iv *int
+	iv **int
 }
 
 func (i *ndif) String() string {
-	if i.iv != nil {
-		return strconv.Itoa(*i.iv)
+	if *i.iv != nil {
+		return strconv.Itoa(**i.iv)
 	}
 	return ""
 }
@@ -69,17 +71,17 @@ func (i *ndif) Set(val string) error {
 	if err != nil {
 		return err
 	}
-	i.iv = &pi
+	*i.iv = &pi
 	return nil
 }
 
 type ndi64f struct {
-	iv *int64
+	iv **int64
 }
 
 func (i *ndi64f) String() string {
-	if i.iv != nil {
-		return strconv.FormatInt(*i.iv, 10)
+	if *i.iv != nil {
+		return strconv.FormatInt(**i.iv, 10)
 	}
 	return ""
 }
@@ -89,17 +91,17 @@ func (i *ndi64f) Set(val string) error {
 	if err != nil {
 		return err
 	}
-	i.iv = &pi
+	*i.iv = &pi
 	return nil
 }
 
 type nduif struct {
-	uiv *uint
+	uiv **uint
 }
 
 func (ui *nduif) String() string {
-	if ui.uiv != nil {
-		return strconv.FormatUint(uint64(*ui.uiv), 10)
+	if *ui.uiv != nil {
+		return strconv.FormatUint(uint64(**ui.uiv), 10)
 	}
 	return ""
 }
@@ -110,17 +112,17 @@ func (ui *nduif) Set(val string) error {
 		return err
 	}
 	pui2 := uint(pui)
-	ui.uiv = &pui2
+	*ui.uiv = &pui2
 	return nil
 }
 
 type ndui64f struct {
-	uiv *uint64
+	uiv **uint64
 }
 
 func (ui *ndui64f) String() string {
-	if ui.uiv != nil {
-		return strconv.FormatUint(*ui.uiv, 10)
+	if *ui.uiv != nil {
+		return strconv.FormatUint(**ui.uiv, 10)
 	}
 	return ""
 }
@@ -130,17 +132,17 @@ func (ui *ndui64f) Set(val string) error {
 	if err != nil {
 		return err
 	}
-	ui.uiv = &pui
+	*ui.uiv = &pui
 	return nil
 }
 
 type ndff struct {
-	fv *float64
+	fv **float64
 }
 
 func (f *ndff) String() string {
-	if f.fv != nil {
-		return strconv.FormatFloat(*f.fv, 'g', -1, 64)
+	if *f.fv != nil {
+		return strconv.FormatFloat(**f.fv, 'g', -1, 64)
 	}
 	return ""
 }
@@ -150,17 +152,17 @@ func (f *ndff) Set(val string) error {
 	if err != nil {
 		return err
 	}
-	f.fv = &pf
+	*f.fv = &pf
 	return nil
 }
 
 type nddf struct {
-	dv *time.Duration
+	dv **time.Duration
 }
 
 func (d *nddf) String() string {
-	if d.dv != nil {
-		return d.dv.String()
+	if *d.dv != nil {
+		return (*d.dv).String()
 	}
 	return ""
 }
@@ -170,7 +172,7 @@ func (d *nddf) Set(val string) error {
 	if err != nil {
 		return err
 	}
-	d.dv = &pd
+	*d.dv = &pd
 	return nil
 }
 
@@ -200,7 +202,7 @@ func (ndf *NoDefFlagSet) NoDefString(name, usage string) **string {
 // NoDefStringVar - Similar to NoDefString, but you supply the double
 // string pointer.
 func (ndf *NoDefFlagSet) NoDefStringVar(sv **string, name, usage string) {
-	s := &ndsf{sv: *sv}
+	s := &ndsf{sv: sv}
 	ndf.Var(s, name, usage)
 }
 
@@ -208,15 +210,15 @@ func (ndf *NoDefFlagSet) NoDefStringVar(sv **string, name, usage string) {
 // nil bool pointer if flag was not set, will reference non-nil otherwise.
 // This allows you to differentiate between the zero val (false) and not set.
 func (ndf *NoDefFlagSet) NoDefBool(name string, usage string) **bool {
-	b := &ndbf{}
-	ndf.NoDefBoolVar(&b.bv, name, usage)
-	return &b.bv
+	var bv *bool
+	ndf.NoDefBoolVar(&bv, name, usage)
+	return &bv
 }
 
 // NoDefBoolVar - similar to NoDefBool, but you supply the double
 // bool pointer.
 func (ndf *NoDefFlagSet) NoDefBoolVar(bv **bool, name, usage string) {
-	b := &ndbf{bv: *bv}
+	b := &ndbf{bv: bv}
 	ndf.Var(b, name, usage)
 }
 
@@ -231,7 +233,7 @@ func (ndf *NoDefFlagSet) NoDefInt(name, usage string) **int {
 
 // NoDefIntVar - similar to NoDefInt, but you sply the double pointer.
 func (ndf *NoDefFlagSet) NoDefIntVar(iv **int, name, usage string) {
-	i := &ndif{iv: *iv}
+	i := &ndif{iv: iv}
 	ndf.Var(i, name, usage)
 }
 
@@ -244,7 +246,7 @@ func (ndf *NoDefFlagSet) NoDefInt64(name, usage string) **int64 {
 
 // NoDefInt64Var - NoDefIntVar but for int64
 func (ndf *NoDefFlagSet) NoDefInt64Var(iv **int64, name, usage string) {
-	i := &ndi64f{iv: *iv}
+	i := &ndi64f{iv: iv}
 	ndf.Var(i, name, usage)
 }
 
@@ -257,7 +259,7 @@ func (ndf *NoDefFlagSet) NoDefUint(name, usage string) **uint {
 
 // NoDefUintVar - same as NoDefUint, but you supply the double p.
 func (ndf *NoDefFlagSet) NoDefUintVar(uiv **uint, name, usage string) {
-	ui := &nduif{uiv: *uiv}
+	ui := &nduif{uiv: uiv}
 	ndf.Var(ui, name, usage)
 }
 
@@ -270,7 +272,7 @@ func (ndf *NoDefFlagSet) NoDefUint64(name, usage string) **uint64 {
 
 // NoDefUnit64Var - uint64 version of NoDefUintVar
 func (ndf *NoDefFlagSet) NoDefUint64Var(uiv **uint64, name, usage string) {
-	ui := &ndui64f{uiv: *uiv}
+	ui := &ndui64f{uiv: uiv}
 	ndf.Var(ui, name, usage)
 }
 
@@ -284,7 +286,7 @@ func (ndf *NoDefFlagSet) NoDefFloat64(name, usage string) **float64 {
 
 // NoDefFloat64Var - you supply the pointer, but same as NoDefFloat64
 func (ndf *NoDefFlagSet) NoDefFloat64Var(fv **float64, name, usage string) {
-	f := &ndff{fv: *fv}
+	f := &ndff{fv: fv}
 	ndf.Var(f, name, usage)
 }
 
@@ -296,8 +298,8 @@ func (ndf *NoDefFlagSet) NoDefDuration(name, usage string) **time.Duration {
 	return &dv
 }
 
-// NoDefDurationVar - same as NoDefDuration, but you supply the double p.
+// NoDefDurationVar - BYO duration pp version of NoDefDuration
 func (ndf *NoDefFlagSet) NoDefDurationVar(dv **time.Duration, name, usage string) {
-	f := &nddf{dv: *dv}
-	ndf.Var(f, name, usage)
+	d := &nddf{dv: dv}
+	ndf.Var(d, name, usage)
 }

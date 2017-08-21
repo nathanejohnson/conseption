@@ -72,11 +72,6 @@ func main() {
 		cfg:   cfg,
 	}
 
-	if true {
-		fmt.Printf("effective config: %#v\n", cfg)
-		return
-	}
-
 	cspt.cc, err = cons.NewClient(cfg.ConsulConfig)
 
 	if err != nil {
