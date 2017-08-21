@@ -115,7 +115,7 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 	cspt.Lock()
 	defer cspt.Unlock()
 	kvps, ok := raw.(api.KVPairs)
-	var svcs []*api.AgentServiceRegistration
+	var regs []*api.AgentServiceRegistration
 	if !ok {
 		fmt.Println("not KVPairs!")
 		return
@@ -124,14 +124,14 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 
 	for _, kvp := range kvps {
 		fmt.Printf("handling %s\n", kvp.Key)
-		s, err := parseServiceRegs(kvp.Value)
+		svcs, err := parseServiceRegs(kvp.Value)
 		if err != nil {
 			fmt.Printf("error parsing service reg: %s\n", err)
-			if s == nil {
+			if svcs == nil {
 				return
 			}
 		}
-		for _, svc := range s {
+		for _, svc := range svcs {
 			if svc.Address == cspt.me {
 				h := md5.Sum(kvp.Value)
 				if ch, ok := cspt.cache[svc.ID]; ok {
@@ -142,7 +142,7 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 					}
 				}
 				news[svc.ID] = true
-				svcs = append(svcs, svc)
+				regs = append(regs, svc)
 				cspt.cache[svc.ID] = h[:]
 			}
 		}
@@ -151,9 +151,11 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 	for k := range cspt.cache {
 		if u, ok := news[k]; ok {
 			if u {
+				// we were updated, so deregister and re-register
 				deregs = append(deregs, k)
-			}
+			} // else no change, no op
 		} else {
+			// key deleted
 			deregs = append(deregs, k)
 			delete(cspt.cache, k)
 		}
@@ -167,7 +169,7 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 		}
 	}
 
-	for _, svc := range svcs {
+	for _, svc := range regs {
 		var err error
 		fmt.Printf("registering %s\n", svc.ID)
 		err = cspt.cc.Agent().ServiceRegister(svc)
@@ -193,17 +195,18 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 		return ss.Services, nil
 	}
 
-	// now try comma separated json objects.
+	// now try serial json objects.
 	pbr := putbackreader.NewPutBackReader(bytes.NewReader(val))
 	jd := json.NewDecoder(pbr)
 	buf := new(bytes.Buffer)
 
 	for {
-		s := &api.AgentServiceRegistration{}
-		err = jd.Decode(s)
+		asr := &api.AgentServiceRegistration{}
+		err = jd.Decode(asr)
 
 		if err != nil {
 			if err == io.EOF {
+				err = nil
 				break
 			}
 			// Handle the case where we have comma separated json
@@ -223,7 +226,7 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 			pbr.SetBackBytes(b[m[1]:])
 			jd = json.NewDecoder(pbr)
 
-			err = jd.Decode(s)
+			err = jd.Decode(asr)
 			if err != nil {
 				if err == io.EOF {
 					err = nil
@@ -233,7 +236,7 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 				break
 			}
 		}
-		ss.Services = append(ss.Services, s)
+		ss.Services = append(ss.Services, asr)
 
 		if !jd.More() {
 			break

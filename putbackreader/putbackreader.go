@@ -37,6 +37,7 @@ func (pbr *PutBackReader) Read(b []byte) (int, error) {
 			pbr.putBack = nil
 		}
 	}
+
 	n, err := pbr.r.Read(b[copied:])
 	return n + copied, err
 }
