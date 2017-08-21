@@ -3,9 +3,9 @@
 // This implements io.Reader, giving you the option to "put back"
 // bytes that were already read once, so that they may be read again.
 // I use this in conseption in conjuction with json.Decoder Buffered()
-// call, which gives me the option of manipulating the stream.  This is
-// mainly used with with json-like serial input where a separator character
-// is used, which pisses the json decoder off right good.
+// call, which gives me the option of manipulating the stream after an
+// error.  This is mainly used with with json-like serial input where a
+// separator character is used, which pisses the json decoder right off.
 //
 // Note: This package is not thread safe.
 package putbackreader
