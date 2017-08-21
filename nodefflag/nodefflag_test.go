@@ -7,15 +7,15 @@ import (
 )
 
 func TestEverything(t *testing.T) {
-	fs := NewNoDefFlagSet("nodefflag_test", flag.ExitOnError)
-	fs.NoDefBool("test_bool", "bool value")
-	fs.NoDefInt("test_int", "int value")
-	fs.NoDefInt64("test_int64", "int64 value")
-	fs.NoDefUint("test_uint", "uint value")
-	fs.NoDefUint64("test_uint64", "uint64 value")
-	fs.NoDefString("test_string", "string value")
-	fs.NoDefFloat64("test_float64", "float64 value")
-	fs.NoDefDuration("test_duration", "time.Duration value")
+	fs := NewNDFlagSet("NDflag_test", flag.ExitOnError)
+	fs.NDBool("test_bool", "bool value")
+	fs.NDInt("test_int", "int value")
+	fs.NDInt64("test_int64", "int64 value")
+	fs.NDUint("test_uint", "uint value")
+	fs.NDUint64("test_uint64", "uint64 value")
+	fs.NDString("test_string", "string value")
+	fs.NDFloat64("test_float64", "float64 value")
+	fs.NDDuration("test_duration", "time.Duration value")
 
 	visitor := func(f *flag.Flag) {
 		g, ok := f.Value.(flag.Getter)

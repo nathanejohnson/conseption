@@ -1,9 +1,9 @@
-// This extends the go flag package to allow for a "no default"
+// Package nodefflag extends the go flag package to allow for a "no default"
 // variation of standard flag variables.  In order to accomplish this,
 // we have to use pointers to pointers.  If the pp references a nil pointer,
 // the flag was not set.  If the pp references a non-nil pointer, the flag
 // was set, and **ptr contains the value.  The pp itself returned will never
-// be nil, and it is expected that the NoDef*Var methods will never receive
+// be nil, and it is expected that the ND*Var methods will never receive
 // a nil **.
 package nodefflag
 
@@ -208,130 +208,130 @@ func (d *nddf) Get() interface{} {
 	return *d.dv
 }
 
-// NoDefFlagSet - extends the flag package to add "no default" variants,
+// NDFlagSet - extends the flag package to add "no default" variants,
 // where no defaults are specified.
-type NoDefFlagSet struct {
+type NDFlagSet struct {
 	flag.FlagSet
 }
 
-// NewNoDefFlagSet - factory method, initializes the underlying FlagSet
-func NewNoDefFlagSet(name string, errorHandling flag.ErrorHandling) *NoDefFlagSet {
+// NewNDFlagSet - factory method, initializes the underlying FlagSet
+func NewNDFlagSet(name string, errorHandling flag.ErrorHandling) *NDFlagSet {
 	fs := flag.NewFlagSet(name, errorHandling)
-	return &NoDefFlagSet{
+	return &NDFlagSet{
 		FlagSet: *fs,
 	}
 }
 
-// NoDefString - returns double string pointer, will reference nil
+// NDString - returns double string pointer, will reference nil
 // string pointer if flag was not set, will reference non-nil otherwise.
 // This allows you to differentiate between the zero val ("") and not set.
-func (ndf *NoDefFlagSet) NoDefString(name, usage string) **string {
+func (ndf *NDFlagSet) NDString(name, usage string) **string {
 	var sv *string
-	ndf.NoDefStringVar(&sv, name, usage)
+	ndf.NDStringVar(&sv, name, usage)
 	return &sv
 }
 
-// NoDefStringVar - Similar to NoDefString, but you supply the double
+// NDStringVar - Similar to NDString, but you supply the double
 // string pointer.
-func (ndf *NoDefFlagSet) NoDefStringVar(sv **string, name, usage string) {
+func (ndf *NDFlagSet) NDStringVar(sv **string, name, usage string) {
 	s := &ndsf{sv: sv}
 	ndf.Var(s, name, usage)
 }
 
-// NoDefBool - returns double bool pointer, will reference
+// NDBool - returns double bool pointer, will reference
 // nil bool pointer if flag was not set, will reference non-nil otherwise.
 // This allows you to differentiate between the zero val (false) and not set.
-func (ndf *NoDefFlagSet) NoDefBool(name string, usage string) **bool {
+func (ndf *NDFlagSet) NDBool(name string, usage string) **bool {
 	var bv *bool
-	ndf.NoDefBoolVar(&bv, name, usage)
+	ndf.NDBoolVar(&bv, name, usage)
 	return &bv
 }
 
-// NoDefBoolVar - similar to NoDefBool, but you supply the double
+// NDBoolVar - similar to NDBool, but you supply the double
 // bool pointer.
-func (ndf *NoDefFlagSet) NoDefBoolVar(bv **bool, name, usage string) {
+func (ndf *NDFlagSet) NDBoolVar(bv **bool, name, usage string) {
 	b := &ndbf{bv: bv}
 	ndf.Var(b, name, usage)
 }
 
-// NoDefInt - returns an int double pointers, will reference
+// NDInt - returns an int double pointers, will reference
 // nil int pointer if flag was not set, will reference non-nil otherwise.
 // This allows you to differentiate between the zero val (0) and not set.
-func (ndf *NoDefFlagSet) NoDefInt(name, usage string) **int {
+func (ndf *NDFlagSet) NDInt(name, usage string) **int {
 	var iv *int
-	ndf.NoDefIntVar(&iv, name, usage)
+	ndf.NDIntVar(&iv, name, usage)
 	return &iv
 }
 
-// NoDefIntVar - similar to NoDefInt, but you sply the double pointer.
-func (ndf *NoDefFlagSet) NoDefIntVar(iv **int, name, usage string) {
+// NDIntVar - similar to NDInt, but you sply the double pointer.
+func (ndf *NDFlagSet) NDIntVar(iv **int, name, usage string) {
 	i := &ndif{iv: iv}
 	ndf.Var(i, name, usage)
 }
 
-// NoDefInt64 - NoDefInt but type is int64
-func (ndf *NoDefFlagSet) NoDefInt64(name, usage string) **int64 {
+// NDInt64 - NDInt but type is int64
+func (ndf *NDFlagSet) NDInt64(name, usage string) **int64 {
 	var iv *int64
-	ndf.NoDefInt64Var(&iv, name, usage)
+	ndf.NDInt64Var(&iv, name, usage)
 	return &iv
 }
 
-// NoDefInt64Var - NoDefIntVar but for int64
-func (ndf *NoDefFlagSet) NoDefInt64Var(iv **int64, name, usage string) {
+// NDInt64Var - NDIntVar but for int64
+func (ndf *NDFlagSet) NDInt64Var(iv **int64, name, usage string) {
 	i := &ndi64f{iv: iv}
 	ndf.Var(i, name, usage)
 }
 
-// NoDefUint - returns double pointer to a uint.
-func (ndf *NoDefFlagSet) NoDefUint(name, usage string) **uint {
+// NDUint - returns double pointer to a uint.
+func (ndf *NDFlagSet) NDUint(name, usage string) **uint {
 	var uiv *uint
-	ndf.NoDefUintVar(&uiv, name, usage)
+	ndf.NDUintVar(&uiv, name, usage)
 	return &uiv
 }
 
-// NoDefUintVar - same as NoDefUint, but you supply the double p.
-func (ndf *NoDefFlagSet) NoDefUintVar(uiv **uint, name, usage string) {
+// NDUintVar - same as NDUint, but you supply the double p.
+func (ndf *NDFlagSet) NDUintVar(uiv **uint, name, usage string) {
 	ui := &nduif{uiv: uiv}
 	ndf.Var(ui, name, usage)
 }
 
-// NoDefUint64 - uint64 version of NoDefUint
-func (ndf *NoDefFlagSet) NoDefUint64(name, usage string) **uint64 {
+// NDUint64 - uint64 version of NDUint
+func (ndf *NDFlagSet) NDUint64(name, usage string) **uint64 {
 	var uiv *uint64
-	ndf.NoDefUint64Var(&uiv, name, usage)
+	ndf.NDUint64Var(&uiv, name, usage)
 	return &uiv
 }
 
-// NoDefUint64Var - uint64 version of NoDefUintVar
-func (ndf *NoDefFlagSet) NoDefUint64Var(uiv **uint64, name, usage string) {
+// NDUint64Var - uint64 version of NDUintVar
+func (ndf *NDFlagSet) NDUint64Var(uiv **uint64, name, usage string) {
 	ui := &ndui64f{uiv: uiv}
 	ndf.Var(ui, name, usage)
 }
 
-// NoDefFloat64 - returns double pointer to a float64.  Works the same
+// NDFloat64 - returns double pointer to a float64.  Works the same
 // as all the other numeric types.
-func (ndf *NoDefFlagSet) NoDefFloat64(name, usage string) **float64 {
+func (ndf *NDFlagSet) NDFloat64(name, usage string) **float64 {
 	var fv *float64
-	ndf.NoDefFloat64Var(&fv, name, usage)
+	ndf.NDFloat64Var(&fv, name, usage)
 	return &fv
 }
 
-// NoDefFloat64Var - you supply the pointer, but same as NoDefFloat64
-func (ndf *NoDefFlagSet) NoDefFloat64Var(fv **float64, name, usage string) {
+// NDFloat64Var - you supply the pointer, but same as NDFloat64
+func (ndf *NDFlagSet) NDFloat64Var(fv **float64, name, usage string) {
 	f := &ndff{fv: fv}
 	ndf.Var(f, name, usage)
 }
 
-// NoDefDuration - duration flag.  returns double pointer, if references
+// NDDuration - duration flag.  returns double pointer, if references
 // nil the flag was not set, otherwise it was set.
-func (ndf *NoDefFlagSet) NoDefDuration(name, usage string) **time.Duration {
+func (ndf *NDFlagSet) NDDuration(name, usage string) **time.Duration {
 	var dv *time.Duration
-	ndf.NoDefDurationVar(&dv, name, usage)
+	ndf.NDDurationVar(&dv, name, usage)
 	return &dv
 }
 
-// NoDefDurationVar - BYO duration pp version of NoDefDuration
-func (ndf *NoDefFlagSet) NoDefDurationVar(dv **time.Duration, name, usage string) {
+// NDDurationVar - BYO duration pp version of NDDuration
+func (ndf *NDFlagSet) NDDurationVar(dv **time.Duration, name, usage string) {
 	d := &nddf{dv: dv}
 	ndf.Var(d, name, usage)
 }

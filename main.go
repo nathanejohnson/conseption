@@ -38,11 +38,11 @@ var precomma = regexp.MustCompile(`^\s*,`)
 
 func main() {
 
-	flags := nodefflag.NewNoDefFlagSet(os.Args[0], flag.ExitOnError)
-	conf := flags.NoDefString("config", "path to toml config file - optional")
-	orphan := flags.NoDefBool("orphan", "orphan mode - default false")
-	prefix := flags.NoDefString("prefix", "prefix to watch for service regs - default /services")
-	cport := flags.NoDefInt("consulport", "tcp port for remote consul connections")
+	flags := nodefflag.NewNDFlagSet(os.Args[0], flag.ExitOnError)
+	conf := flags.NDString("config", "path to toml config file - optional")
+	orphan := flags.NDBool("orphan", "orphan mode - default false")
+	prefix := flags.NDString("prefix", "prefix to watch for service regs - default /services")
+	cport := flags.NDInt("consulport", "tcp port for remote consul connections")
 	err := flags.Parse(os.Args[1:])
 	if err != nil {
 		fatalf(err.Error())
