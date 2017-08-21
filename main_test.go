@@ -194,28 +194,28 @@ var payload2 = []byte(`{
 `)
 
 func TestProcessor(t *testing.T) {
-	for i, p := range [][]byte{
-		payload, // serial json with comma
-		append(payload, []byte(",")[0]),                     // with trailing comma
-		[]byte("[" + string(payload) + "]"),                 // list style
-		[]byte("{\"services\": [" + string(payload) + "]}"), // enclosing json style
-		payload2, // serial json without separator
+	for desc, p := range map[string][]byte{
+		"comma serial":          payload,
+		"serial trailing comma": append(payload, []byte(",")[0]),
+		"list":                  []byte("[" + string(payload) + "]"),
+		"json object":           []byte("{\"services\": [" + string(payload) + "]}"),
+		"no comma serial":       payload2,
 	} {
 		regs, err := parseServiceRegs(p)
 		if err != nil {
-			t.Errorf("parseServiceRegs failed in pass %d: %s\n", i, err)
+			t.Errorf("parseServiceRegs failed in pass %s: %s\n", desc, err)
 			t.FailNow()
 		}
 		if len(regs) != 5 {
-			t.Errorf("Invalid length: %d in pass %d\n", len(regs), i)
+			t.Errorf("Invalid length: %d in pass %s\n", len(regs), desc)
 			t.FailNow()
 		}
 		if regs[0].Address != "cb01.labs.widget.co" {
-			t.Errorf("address mismatch in pass %d", i)
+			t.Errorf("address mismatch in pass %s", desc)
 			t.Fail()
 		}
 		if regs[4].Name != "couchbase" {
-			t.Errorf("name mismatch in pass %d", i)
+			t.Errorf("name mismatch in pass %s", desc)
 			t.Fail()
 		}
 

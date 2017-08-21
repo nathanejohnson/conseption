@@ -1,6 +1,8 @@
-hash: d7ffaf3fb4d2371695ff14a33eda71a16d6e983f34cdae5cc48effaea95b9eef
-updated: 2017-08-19T09:24:13.244690813-05:00
+hash: 5dff15ae298ec9307315599a17fe5d95514db48d3f6684124329c506e689a47f
+updated: 2017-08-21T08:34:32.715929127-05:00
 imports:
+- name: github.com/BurntSushi/toml
+  version: b26d9c308763d68093482582cea63d69be07a0f0
 - name: github.com/hashicorp/consul
   version: 75ca2cace08e38de8af1731ee8614d0533d5a4d4
   subpackages:

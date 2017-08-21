@@ -1,0 +1,3 @@
+Prefix = "/servicesblah"
+Orphan = false
+ConsulPort = 8500

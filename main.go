@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -11,42 +12,87 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/BurntSushi/toml"
 	"github.com/hashicorp/consul/api"
 	cons "github.com/myENA/consultant"
+	"github.com/nathanejohnson/conseption/nodefflag"
 	"github.com/nathanejohnson/conseption/putbackreader"
 )
 
-var precomma = regexp.MustCompile(`^\s*,`)
+type Config struct {
+	Prefix       string      // The prefix that we will be watching in the consul kv
+	Orphan       bool        // whether we will be taking care of orphans or locals only
+	ConsulPort   int         // port for consul - defaults to 8500
+	ConsulConfig *api.Config // consul config
+}
 
-// ConsulPort - the tcp port consul agents listen on.
-const ConsulPort = 8500
+func NewDefaultConfig() *Config {
+	return &Config{
+		Prefix:     "/services",
+		Orphan:     false,
+		ConsulPort: 8500,
+	}
+}
+
+var precomma = regexp.MustCompile(`^\s*,`)
 
 func main() {
 
-	cspt := conseption{
-		conf:  api.DefaultConfig(),
+	flags := nodefflag.NewNoDefFlagSet(os.Args[0], flag.ExitOnError)
+	conf := flags.NoDefString("config", "path to toml config file - optional")
+	orphan := flags.NoDefBool("orphan", "orphan mode - default false")
+	prefix := flags.NoDefString("prefix", "prefix to watch for service regs - default /services")
+	err := flags.Parse(os.Args[1:])
+	if err != nil {
+		fatalf(err.Error())
+	}
+
+	cfg := NewDefaultConfig()
+	if *conf != nil {
+		_, err = toml.DecodeFile(**conf, cfg)
+		if err != nil {
+			fatalf(err.Error())
+		}
+	}
+	if *orphan != nil {
+		cfg.Orphan = **orphan
+	}
+
+	if *prefix != nil {
+		cfg.Prefix = **prefix
+	}
+
+	if cfg.ConsulConfig == nil {
+		cfg.ConsulConfig = api.DefaultConfig()
+	}
+
+	cspt := &conseption{
 		me:    os.Getenv("HOSTNAME"),
 		cache: make(map[string][]byte),
+		cfg:   cfg,
 	}
-	var err error
 
-	cspt.cc, err = cons.NewClient(cspt.conf)
+	if true {
+		fmt.Printf("effective config: %#v\n", cfg)
+		return
+	}
+
+	cspt.cc, err = cons.NewClient(cfg.ConsulConfig)
 
 	if err != nil {
 		fatalf("Error connecting to consul: %s\n", err)
-		os.Exit(1)
 	}
 
 	cspt.node, err = cspt.cc.Agent().NodeName()
 	if err != nil {
-		fatalf("Cannot determine node name")
+		fatalf("Cannot determine node name: %s", err)
 	}
 
-	// make prefix configurable
-	wkp, err := cspt.cc.WatchKeyPrefix("/services", true, cspt.handler)
+	wkp, err := cspt.cc.WatchKeyPrefix(cspt.cfg.Prefix, true, cspt.handler)
 	if err != nil {
 		fatalf("Error setting up watcher: %s\n", err)
 	}
+
 	svcs, _, err := cspt.cc.Catalog().Services(&api.QueryOptions{AllowStale: true})
 	if err != nil {
 		fatalf("Error querying catalog: %s\n", err)
@@ -71,7 +117,7 @@ func main() {
 
 	// Start the runner, which will get an initial full kv dump of everything
 	// under the kv prefix.
-	err = wkp.Run(cspt.conf.Address)
+	err = wkp.Run(cspt.cfg.ConsulConfig.Address)
 	if err != nil {
 		fatalf("%s\n", err)
 	}
@@ -80,11 +126,11 @@ func main() {
 
 type conseption struct {
 	sync.Mutex
-	conf  *api.Config
 	cc    *cons.Client
 	me    string
 	node  string
 	cache map[string][]byte
+	cfg   *Config
 }
 
 type services struct {
@@ -94,13 +140,14 @@ type services struct {
 func (cspt *conseption) deregRemote(se *api.CatalogService) error {
 	// shallow copy of conf
 	conf := &api.Config{}
-	*conf = *cspt.conf
+	*conf = *cspt.cfg.ConsulConfig
 	// get info on the node
 	cn, _, err := cspt.cc.Catalog().Node(se.Node, &api.QueryOptions{AllowStale: true})
 	if err != nil {
 		return err
 	}
-	conf.Address = fmt.Sprintf("%s:%d", cn.Node.Address, ConsulPort)
+
+	conf.Address = fmt.Sprintf("%s:%d", cn.Node.Address, cspt.cfg.ConsulPort)
 
 	rcc, err := cons.NewClient(conf)
 	if err != nil {
