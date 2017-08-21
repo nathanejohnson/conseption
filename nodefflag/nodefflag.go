@@ -30,6 +30,10 @@ func (s *ndsf) Set(val string) error {
 	return nil
 }
 
+func (s *ndsf) Get() interface{} {
+	return *s.sv
+}
+
 type ndbf struct {
 	bv **bool
 }
@@ -49,6 +53,10 @@ func (b *ndbf) Set(val string) error {
 	}
 	*b.bv = &pb
 	return nil
+}
+
+func (b *ndbf) Get() interface{} {
+	return *b.bv
 }
 
 func (b *ndbf) IsBoolFlag() bool {
@@ -75,6 +83,10 @@ func (i *ndif) Set(val string) error {
 	return nil
 }
 
+func (i *ndif) Get() interface{} {
+	return *i.iv
+}
+
 type ndi64f struct {
 	iv **int64
 }
@@ -93,6 +105,10 @@ func (i *ndi64f) Set(val string) error {
 	}
 	*i.iv = &pi
 	return nil
+}
+
+func (i *ndi64f) Get() interface{} {
+	return *i.iv
 }
 
 type nduif struct {
@@ -116,6 +132,10 @@ func (ui *nduif) Set(val string) error {
 	return nil
 }
 
+func (ui *nduif) Get() interface{} {
+	return *ui.uiv
+}
+
 type ndui64f struct {
 	uiv **uint64
 }
@@ -134,6 +154,10 @@ func (ui *ndui64f) Set(val string) error {
 	}
 	*ui.uiv = &pui
 	return nil
+}
+
+func (ui *ndui64f) Get() interface{} {
+	return *ui.uiv
 }
 
 type ndff struct {
@@ -156,6 +180,10 @@ func (f *ndff) Set(val string) error {
 	return nil
 }
 
+func (f *ndff) Get() interface{} {
+	return *f.fv
+}
+
 type nddf struct {
 	dv **time.Duration
 }
@@ -174,6 +202,10 @@ func (d *nddf) Set(val string) error {
 	}
 	*d.dv = &pd
 	return nil
+}
+
+func (d *nddf) Get() interface{} {
+	return *d.dv
 }
 
 // NoDefFlagSet - extends the flag package to add "no default" variants,
@@ -270,7 +302,7 @@ func (ndf *NoDefFlagSet) NoDefUint64(name, usage string) **uint64 {
 	return &uiv
 }
 
-// NoDefUnit64Var - uint64 version of NoDefUintVar
+// NoDefUint64Var - uint64 version of NoDefUintVar
 func (ndf *NoDefFlagSet) NoDefUint64Var(uiv **uint64, name, usage string) {
 	ui := &ndui64f{uiv: uiv}
 	ndf.Var(ui, name, usage)
