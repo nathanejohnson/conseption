@@ -39,11 +39,10 @@ type ndbf struct {
 }
 
 func (b *ndbf) String() string {
-	var ret bool
 	if *b.bv != nil {
-		ret = **b.bv
+		return strconv.FormatBool(**b.bv)
 	}
-	return strconv.FormatBool(ret)
+	return ""
 }
 
 func (b *ndbf) Set(val string) error {

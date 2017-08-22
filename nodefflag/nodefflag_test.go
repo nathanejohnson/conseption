@@ -6,9 +6,14 @@ import (
 	"time"
 )
 
+// These tests were heavily inspired by / ripped off of the
+// "flag" package test suite.
+
 func TestNils(t *testing.T) {
 	fs := nfs()
+	m := make(map[string]*flag.Flag)
 	visitor := func(f *flag.Flag) {
+		m[f.Name] = f
 		g, ok := f.Value.(flag.Getter)
 		if !ok {
 			t.Errorf("Visit: value does not satisfy Getter: %T", f.Value)
@@ -36,6 +41,12 @@ func TestNils(t *testing.T) {
 		}
 	}
 	fs.VisitAll(visitor)
+	if len(m) != 8 {
+		t.Error("VisitAll misses some flags")
+		for k, v := range m {
+			t.Log(k, *v)
+		}
+	}
 }
 func TestSet(t *testing.T) {
 	fs := nfs()
@@ -49,7 +60,9 @@ func TestSet(t *testing.T) {
 	_ = fs.Set("test_float64", "123.45")
 	_ = fs.Set("test_duration", "30s")
 
+	m := make(map[string]*flag.Flag)
 	visitor := func(f *flag.Flag) {
+		m[f.Name] = f
 		var ok bool
 		g := f.Value.(flag.Getter)
 		switch f.Name {
@@ -75,6 +88,12 @@ func TestSet(t *testing.T) {
 		}
 	}
 	fs.Visit(visitor)
+	if len(m) != 8 {
+		t.Error("Visit misses some flags")
+		for k, v := range m {
+			t.Log(k, *v)
+		}
+	}
 
 }
 
@@ -107,33 +126,98 @@ func TestPtrsMatch(t *testing.T) {
 	_ = fs.Set("test_string", "your ad here")
 	_ = fs.Set("test_float64", "123.45")
 	_ = fs.Set("test_duration", "30s")
+	m := make(map[string]*flag.Flag)
+
 	visitor := func(f *flag.Flag) {
+		m[f.Name] = f
 		var ok bool
 		g := f.Value.(flag.Getter)
 		switch f.Name {
 		case "test_bool":
-			ok = *bv == true
+			ok = g.Get() == bv && *bv == true
 		case "test_int":
-			ok = *iv == 42
+			ok = g.Get() == iv && *iv == 42
 		case "test_int64":
-			ok = *i64v == int64(-420)
+			ok = g.Get() == i64v && *i64v == int64(-420)
 		case "test_uint":
-			ok = *uiv == uint(80)
+			ok = g.Get() == uiv && *uiv == uint(80)
 		case "test_uint64":
-			ok = *ui64v == uint64(800)
+			ok = g.Get() == ui64v && *ui64v == uint64(800)
 		case "test_string":
-			ok = *sv == "your ad here"
-
+			ok = g.Get() == sv && *sv == "your ad here"
 		case "test_float64":
-			ok = *fv == float64(123.45)
+			ok = g.Get() == fv && *fv == float64(123.45)
 		case "test_duration":
-			ok = dv.String() == "30s"
+			ok = g.Get() == dv && dv.String() == "30s"
 		}
 		if !ok {
 			t.Errorf("Visit: bad value %T(%#v)%p for %s", g.Get(), g.Get(), g.Get(), f.Name)
 		}
 	}
 	fs.Visit(visitor)
+	if len(m) != 8 {
+		t.Error("Visit misses some flags")
+		for k, v := range m {
+			t.Log(k, *v)
+		}
+	}
+}
+
+func TestPtrsMatchDeux(t *testing.T) {
+	fs := NewNDFlagSet("NDflag_test", flag.ExitOnError)
+
+	bv := fs.NDBool("test_bool", "bool value")
+	iv := fs.NDInt("test_int", "int value")
+	i64v := fs.NDInt64("test_int64", "int64 value")
+	uiv := fs.NDUint("test_uint", "uint value")
+	ui64v := fs.NDUint64("test_uint64", "uint64 value")
+	sv := fs.NDString("test_string", "string value")
+	fv := fs.NDFloat64("test_float64", "float64 value")
+	dv := fs.NDDuration("test_duration", "time.Duration value")
+
+	_ = fs.Set("test_bool", "true")
+	_ = fs.Set("test_int", "42")
+	_ = fs.Set("test_int64", "-420")
+	_ = fs.Set("test_uint", "80")
+	_ = fs.Set("test_uint64", "800")
+	_ = fs.Set("test_string", "your ad here")
+	_ = fs.Set("test_float64", "123.45")
+	_ = fs.Set("test_duration", "30s")
+	m := make(map[string]*flag.Flag)
+
+	visitor := func(f *flag.Flag) {
+		m[f.Name] = f
+		var ok bool
+		g := f.Value.(flag.Getter)
+		switch f.Name {
+		case "test_bool":
+			ok = g.Get() == *bv && **bv == true
+		case "test_int":
+			ok = g.Get() == *iv && **iv == 42
+		case "test_int64":
+			ok = g.Get() == *i64v && **i64v == int64(-420)
+		case "test_uint":
+			ok = g.Get() == *uiv && **uiv == uint(80)
+		case "test_uint64":
+			ok = g.Get() == *ui64v && **ui64v == uint64(800)
+		case "test_string":
+			ok = g.Get() == *sv && **sv == "your ad here"
+		case "test_float64":
+			ok = g.Get() == *fv && **fv == float64(123.45)
+		case "test_duration":
+			ok = g.Get() == *dv && (*dv).String() == "30s"
+		}
+		if !ok {
+			t.Errorf("Visit: bad value %T(%#v)%p for %s", g.Get(), g.Get(), g.Get(), f.Name)
+		}
+	}
+	fs.Visit(visitor)
+	if len(m) != 8 {
+		t.Error("Visit misses some flags")
+		for k, v := range m {
+			t.Log(k, *v)
+		}
+	}
 }
 
 func nfs() *NDFlagSet {
