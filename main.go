@@ -15,7 +15,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/hashicorp/consul/api"
 	cons "github.com/myENA/consultant"
-	"github.com/nathanejohnson/conseption/nodefflag"
+	ndf "github.com/myENA/nodefflag"
 	"github.com/nathanejohnson/conseption/putbackreader"
 )
 
@@ -38,7 +38,7 @@ var precomma = regexp.MustCompile(`^\s*,`)
 
 func main() {
 
-	flags := nodefflag.NewNDFlagSet(os.Args[0], flag.ExitOnError)
+	flags := ndf.NewNDFlagSet(os.Args[0], flag.ExitOnError)
 	conf := flags.NDString("config", "path to toml config file - optional")
 	orphan := flags.NDBool("orphan", "orphan mode - default false")
 	prefix := flags.NDString("prefix", "prefix to watch for service regs - default /services")
