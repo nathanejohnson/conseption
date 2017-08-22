@@ -14,38 +14,34 @@ import (
 )
 
 // implement the Value interface for flags
-type ndsf struct {
-	sv **string
-}
+type ndsf struct{ sv **string }
 
-func (s *ndsf) String() string {
+func (s ndsf) String() string {
 	if *s.sv != nil {
 		return **s.sv
 	}
 	return ""
 }
 
-func (s *ndsf) Set(val string) error {
+func (s ndsf) Set(val string) error {
 	*s.sv = &val
 	return nil
 }
 
-func (s *ndsf) Get() interface{} {
+func (s ndsf) Get() interface{} {
 	return *s.sv
 }
 
-type ndbf struct {
-	bv **bool
-}
+type ndbf struct{ bv **bool }
 
-func (b *ndbf) String() string {
+func (b ndbf) String() string {
 	if *b.bv != nil {
 		return strconv.FormatBool(**b.bv)
 	}
 	return ""
 }
 
-func (b *ndbf) Set(val string) error {
+func (b ndbf) Set(val string) error {
 	pb, err := strconv.ParseBool(val)
 	if err != nil {
 		return err
@@ -54,26 +50,24 @@ func (b *ndbf) Set(val string) error {
 	return nil
 }
 
-func (b *ndbf) Get() interface{} {
+func (b ndbf) Get() interface{} {
 	return *b.bv
 }
 
-func (b *ndbf) IsBoolFlag() bool {
+func (b ndbf) IsBoolFlag() bool {
 	return true
 }
 
-type ndif struct {
-	iv **int
-}
+type ndif struct{ iv **int }
 
-func (i *ndif) String() string {
+func (i ndif) String() string {
 	if *i.iv != nil {
 		return strconv.Itoa(**i.iv)
 	}
 	return ""
 }
 
-func (i *ndif) Set(val string) error {
+func (i ndif) Set(val string) error {
 	pi, err := strconv.Atoi(val)
 	if err != nil {
 		return err
@@ -82,22 +76,20 @@ func (i *ndif) Set(val string) error {
 	return nil
 }
 
-func (i *ndif) Get() interface{} {
+func (i ndif) Get() interface{} {
 	return *i.iv
 }
 
-type ndi64f struct {
-	iv **int64
-}
+type ndi64f struct{ iv **int64 }
 
-func (i *ndi64f) String() string {
+func (i ndi64f) String() string {
 	if *i.iv != nil {
 		return strconv.FormatInt(**i.iv, 10)
 	}
 	return ""
 }
 
-func (i *ndi64f) Set(val string) error {
+func (i ndi64f) Set(val string) error {
 	pi, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
 		return err
@@ -106,22 +98,20 @@ func (i *ndi64f) Set(val string) error {
 	return nil
 }
 
-func (i *ndi64f) Get() interface{} {
+func (i ndi64f) Get() interface{} {
 	return *i.iv
 }
 
-type nduif struct {
-	uiv **uint
-}
+type nduif struct{ uiv **uint }
 
-func (ui *nduif) String() string {
+func (ui nduif) String() string {
 	if *ui.uiv != nil {
 		return strconv.FormatUint(uint64(**ui.uiv), 10)
 	}
 	return ""
 }
 
-func (ui *nduif) Set(val string) error {
+func (ui nduif) Set(val string) error {
 	pui, err := strconv.ParseUint(val, 10, 64)
 	if err != nil {
 		return err
@@ -131,22 +121,20 @@ func (ui *nduif) Set(val string) error {
 	return nil
 }
 
-func (ui *nduif) Get() interface{} {
+func (ui nduif) Get() interface{} {
 	return *ui.uiv
 }
 
-type ndui64f struct {
-	uiv **uint64
-}
+type ndui64f struct{ uiv **uint64 }
 
-func (ui *ndui64f) String() string {
+func (ui ndui64f) String() string {
 	if *ui.uiv != nil {
 		return strconv.FormatUint(**ui.uiv, 10)
 	}
 	return ""
 }
 
-func (ui *ndui64f) Set(val string) error {
+func (ui ndui64f) Set(val string) error {
 	pui, err := strconv.ParseUint(val, 10, 64)
 	if err != nil {
 		return err
@@ -155,22 +143,18 @@ func (ui *ndui64f) Set(val string) error {
 	return nil
 }
 
-func (ui *ndui64f) Get() interface{} {
-	return *ui.uiv
-}
+func (ui ndui64f) Get() interface{} { return *ui.uiv }
 
-type ndff struct {
-	fv **float64
-}
+type ndff struct{ fv **float64 }
 
-func (f *ndff) String() string {
+func (f ndff) String() string {
 	if *f.fv != nil {
 		return strconv.FormatFloat(**f.fv, 'g', -1, 64)
 	}
 	return ""
 }
 
-func (f *ndff) Set(val string) error {
+func (f ndff) Set(val string) error {
 	pf, err := strconv.ParseFloat(val, 64)
 	if err != nil {
 		return err
@@ -179,22 +163,20 @@ func (f *ndff) Set(val string) error {
 	return nil
 }
 
-func (f *ndff) Get() interface{} {
+func (f ndff) Get() interface{} {
 	return *f.fv
 }
 
-type nddf struct {
-	dv **time.Duration
-}
+type nddf struct{ dv **time.Duration }
 
-func (d *nddf) String() string {
+func (d nddf) String() string {
 	if *d.dv != nil {
 		return (*d.dv).String()
 	}
 	return ""
 }
 
-func (d *nddf) Set(val string) error {
+func (d nddf) Set(val string) error {
 	pd, err := time.ParseDuration(val)
 	if err != nil {
 		return err
@@ -203,15 +185,13 @@ func (d *nddf) Set(val string) error {
 	return nil
 }
 
-func (d *nddf) Get() interface{} {
+func (d nddf) Get() interface{} {
 	return *d.dv
 }
 
 // NDFlagSet - extends the flag package to add "no default" variants,
 // where no defaults are specified.
-type NDFlagSet struct {
-	flag.FlagSet
-}
+type NDFlagSet struct{ flag.FlagSet }
 
 // NewNDFlagSet - factory method, initializes the underlying FlagSet
 func NewNDFlagSet(name string, errorHandling flag.ErrorHandling) *NDFlagSet {
@@ -233,7 +213,7 @@ func (ndf *NDFlagSet) NDString(name, usage string) **string {
 // NDStringVar - Similar to NDString, but you supply the double
 // string pointer.
 func (ndf *NDFlagSet) NDStringVar(sv **string, name, usage string) {
-	s := &ndsf{sv: sv}
+	s := ndsf{sv: sv}
 	ndf.Var(s, name, usage)
 }
 
@@ -249,7 +229,7 @@ func (ndf *NDFlagSet) NDBool(name string, usage string) **bool {
 // NDBoolVar - similar to NDBool, but you supply the double
 // bool pointer.
 func (ndf *NDFlagSet) NDBoolVar(bv **bool, name, usage string) {
-	b := &ndbf{bv: bv}
+	b := ndbf{bv: bv}
 	ndf.Var(b, name, usage)
 }
 
@@ -264,7 +244,7 @@ func (ndf *NDFlagSet) NDInt(name, usage string) **int {
 
 // NDIntVar - similar to NDInt, but you sply the double pointer.
 func (ndf *NDFlagSet) NDIntVar(iv **int, name, usage string) {
-	i := &ndif{iv: iv}
+	i := ndif{iv: iv}
 	ndf.Var(i, name, usage)
 }
 
@@ -277,7 +257,7 @@ func (ndf *NDFlagSet) NDInt64(name, usage string) **int64 {
 
 // NDInt64Var - NDIntVar but for int64
 func (ndf *NDFlagSet) NDInt64Var(iv **int64, name, usage string) {
-	i := &ndi64f{iv: iv}
+	i := ndi64f{iv: iv}
 	ndf.Var(i, name, usage)
 }
 
@@ -290,7 +270,7 @@ func (ndf *NDFlagSet) NDUint(name, usage string) **uint {
 
 // NDUintVar - same as NDUint, but you supply the double p.
 func (ndf *NDFlagSet) NDUintVar(uiv **uint, name, usage string) {
-	ui := &nduif{uiv: uiv}
+	ui := nduif{uiv: uiv}
 	ndf.Var(ui, name, usage)
 }
 
@@ -303,7 +283,7 @@ func (ndf *NDFlagSet) NDUint64(name, usage string) **uint64 {
 
 // NDUint64Var - uint64 version of NDUintVar
 func (ndf *NDFlagSet) NDUint64Var(uiv **uint64, name, usage string) {
-	ui := &ndui64f{uiv: uiv}
+	ui := ndui64f{uiv: uiv}
 	ndf.Var(ui, name, usage)
 }
 
@@ -317,7 +297,7 @@ func (ndf *NDFlagSet) NDFloat64(name, usage string) **float64 {
 
 // NDFloat64Var - you supply the pointer, but same as NDFloat64
 func (ndf *NDFlagSet) NDFloat64Var(fv **float64, name, usage string) {
-	f := &ndff{fv: fv}
+	f := ndff{fv: fv}
 	ndf.Var(f, name, usage)
 }
 
@@ -331,6 +311,6 @@ func (ndf *NDFlagSet) NDDuration(name, usage string) **time.Duration {
 
 // NDDurationVar - BYO duration pp version of NDDuration
 func (ndf *NDFlagSet) NDDurationVar(dv **time.Duration, name, usage string) {
-	d := &nddf{dv: dv}
+	d := nddf{dv: dv}
 	ndf.Var(d, name, usage)
 }
