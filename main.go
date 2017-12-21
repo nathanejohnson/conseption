@@ -323,6 +323,8 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 	}
 	news := make(map[string]bool)
 
+	qo := &api.QueryOptions{AllowStale: true}
+
 	for _, kvp := range kvps {
 		fmt.Printf("handling %s\n", kvp.Key)
 		svcs, err := parseServiceRegs(kvp.Value)
@@ -334,8 +336,10 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 		}
 		for _, svc := range svcs {
 			k := askey(svc)
+
+			//TODO - deregister if it's mine and
+			// someone elsehas it.
 			if cspt.isItI(svc.Address) {
-				k := askey(svc)
 				h := md5.Sum(kvp.Value)
 				if ch, ok := cspt.cache[k]; ok {
 					if bytes.Equal(ch.sum, h[:]) {
@@ -349,6 +353,19 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 				cspt.cache[k] = &cacheEntry{
 					sum: h[:],
 					asr: svc,
+				}
+			} else if cspt.cfg.Orphanage {
+				var tag string
+				if len(svc.Tags) > 0 {
+					tag = svc.Tags[0]
+				}
+				sents, _, err := cspt.cc.Health().Service(svc.Name, tag, false, qo)
+				if err != nil {
+					fmt.Println("Error fetching services", err)
+					continue
+				}
+				for _, sent := range matchesTags(sents, svc.Tags) {
+
 				}
 			}
 		}
@@ -383,6 +400,32 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 			fmt.Printf("error returned from registering service: %s\n", err)
 		}
 	}
+}
+
+// prune service entries so that the only entries returned match *all* the tags passed in.
+func matchesTags(ses []*api.ServiceEntry, tags []string) []*api.ServiceEntry {
+	var rv []*api.ServiceEntry
+
+	tagmap := make(map[string]bool)
+
+	for _, t := range tags {
+		tagmap[t] = true
+	}
+OUTER:
+	for _, se := range ses {
+		if len(tagmap) != len(se.Service.Tags) {
+			continue
+		}
+		for _, t := range se.Service.Tags {
+			if !tagmap[t] {
+				continue OUTER
+			}
+		}
+		rv = append(rv, se)
+	}
+
+	return rv
+
 }
 
 func askey(svc *api.AgentServiceRegistration) string {
