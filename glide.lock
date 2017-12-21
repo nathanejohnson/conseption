@@ -1,10 +1,10 @@
 hash: 5dff15ae298ec9307315599a17fe5d95514db48d3f6684124329c506e689a47f
-updated: 2017-08-21T08:34:32.715929127-05:00
+updated: 2017-12-19T08:57:50.760462-06:00
 imports:
 - name: github.com/BurntSushi/toml
   version: b26d9c308763d68093482582cea63d69be07a0f0
 - name: github.com/hashicorp/consul
-  version: 75ca2cace08e38de8af1731ee8614d0533d5a4d4
+  version: 112c0603d3d6fb23ab5f15e8fdb1a761da8eaf9a
   subpackages:
   - api
   - watch
@@ -24,6 +24,8 @@ imports:
   version: 7d17a5f4b05cb1ecfe56203c0458e22d14fb4f45
 - name: github.com/myENA/go-stdlogger
   version: 8db9487f39cfca4413eda7948dd5dcc3f1481dda
+- name: github.com/myENA/nodefflag
+  version: f4d608864d38e1606dd1add72295ae6a491c1346
 - name: github.com/pkg/errors
   version: c605e284fe17294bda444b34710735b29d1a9d90
 - name: github.com/renstrom/shortuuid

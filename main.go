@@ -7,10 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/hashicorp/consul/api"
@@ -20,17 +22,43 @@ import (
 )
 
 type Config struct {
-	Prefix       string      // The prefix that we will be watching in the consul kv
-	Orphan       bool        // whether we will be taking care of orphans or locals only
-	ConsulPort   int         // port for consul - defaults to 8500
+	// The prefix that we will be watching in the consul kv.  This is where our agent
+	// service registrations live.
+	Prefix string
+
+	// whether we will be taking care of orphans or locals only.  Defaults to false,
+	// meaning locals only
+	Orphanage bool
+
+	// port for remote consul agents - defaults to 8500 (why isn't this in the catalog?)
+	ConsulPort int
+
+	// ConsulConfig - consul api.Config struct.  if nil, a sensible default will be used.
 	ConsulConfig *api.Config // consul config
+
+	// TagPrefix for service registration
+	TagPrefix string
+
+	// ServiceName for consul registration
+	ServiceName string
+
+	// TTL for service registration
+	TTLInterval api.ReadableDuration
+
+	// if true, deregister our conseption service from local agent.  defaults to true.
+	DeregOnExit bool `toml",omitempty"`
 }
 
 func NewDefaultConfig() *Config {
 	return &Config{
-		Prefix:     "/services",
-		Orphan:     false,
-		ConsulPort: 8500,
+		Prefix:       "/services",
+		Orphanage:    false,
+		ConsulPort:   8500,
+		ConsulConfig: api.DefaultConfig(),
+		TagPrefix:    "conseption",
+		ServiceName:  "conseption",
+		TTLInterval:  api.ReadableDuration(time.Second * 30),
+		DeregOnExit:  true,
 	}
 }
 
@@ -39,42 +67,47 @@ var precomma = regexp.MustCompile(`^\s*,`)
 func main() {
 
 	flags := ndf.NewNDFlagSet(os.Args[0], flag.ExitOnError)
-	conf := flags.NDString("config", "path to toml config file - optional")
-	orphan := flags.NDBool("orphan", "orphan mode - default false")
-	prefix := flags.NDString("prefix", "prefix to watch for service regs - default /services")
-	cport := flags.NDInt("consulport", "tcp port for remote consul connections")
+	conf := flags.ZVString("config", "-config=/path/to/some/config", "path to toml config file - optional")
+	orphan := flags.ZVBool("orphan", true, "orphan mode - default false")
+	prefix := flags.ZVString("prefix", "-prefix=/services", "prefix to watch for service regs - default /services")
+	cport := flags.NDInt("consulport", 8500, "tcp port for remote consul connections")
 	err := flags.Parse(os.Args[1:])
 	if err != nil {
 		fatalf(err.Error())
 	}
 
 	cfg := NewDefaultConfig()
-	if *conf != nil {
-		_, err = toml.DecodeFile(**conf, cfg)
+	if *conf != "" {
+		_, err = toml.DecodeFile(*conf, cfg)
 		if err != nil {
 			fatalf(err.Error())
 		}
 	}
-	if *orphan != nil {
-		cfg.Orphan = **orphan
-	}
+
+	cfg.Orphanage = *orphan
 
 	if *cport != nil {
 		cfg.ConsulPort = **cport
 	}
 
-	if *prefix != nil {
-		cfg.Prefix = **prefix
+	if *prefix != "" {
+		cfg.Prefix = *prefix
 	}
 
 	if cfg.ConsulConfig == nil {
 		cfg.ConsulConfig = api.DefaultConfig()
 	}
 
+	ips, err := ifaces()
+	if err != nil {
+		fmt.Println("Error fetching interfaces:", err)
+	}
+
 	cspt := &conseption{
-		me:    os.Getenv("HOSTNAME"),
-		cache: make(map[string][]byte),
-		cfg:   cfg,
+		me:       strings.ToLower(os.Getenv("HOSTNAME")),
+		cache:    make(map[string]*cacheEntry),
+		cfg:      cfg,
+		localIPs: ips,
 	}
 
 	cspt.cc, err = cons.NewClient(cfg.ConsulConfig)
@@ -83,10 +116,57 @@ func main() {
 		fatalf("Error connecting to consul: %s\n", err)
 	}
 
+	// register our own service handler.
+
+	asr := &api.AgentServiceRegistration{
+		ID:   cspt.cfg.ServiceName,
+		Name: cspt.cfg.ServiceName,
+	}
+
+	if cspt.cfg.Orphanage {
+		asr.Tags = []string{"orphanage"}
+	} else {
+		asr.Tags = []string{"localagent"}
+	}
+
+	err = cspt.cc.Agent().ServiceRegister(asr)
+	if err != nil {
+		fatalf("Could not register our service: %s\n", err)
+	}
+	cspt.chkid = cspt.cfg.ServiceName + "_ttl"
+	err = cspt.cc.Agent().CheckRegister(&api.AgentCheckRegistration{
+		ID:   cspt.chkid,
+		Name: cspt.chkid,
+		AgentServiceCheck: api.AgentServiceCheck{
+			TTL: cspt.cfg.TTLInterval.String(),
+		},
+	})
+
+	go func() {
+		sleepint := time.Duration(cspt.cfg.TTLInterval / 2)
+		for {
+			err := cspt.cc.Agent().UpdateTTL(cspt.chkid, "saul goodman", "passing")
+			if err != nil {
+				fmt.Println("Got error updating TTL", err)
+			}
+			time.Sleep(sleepint)
+		}
+	}()
+
 	cspt.node, err = cspt.cc.Agent().NodeName()
 	if err != nil {
 		fatalf("Cannot determine node name: %s", err)
 	}
+
+	// Seed the cache
+
+	kvps, _, err := cspt.cc.KV().List(cspt.cfg.Prefix, &api.QueryOptions{AllowStale: true})
+
+	if err != nil {
+		fatalf("Error fetching from prefix: %s\n", err)
+	}
+
+	cspt.handler(0, kvps)
 
 	wkp, err := cspt.cc.WatchKeyPrefix(cspt.cfg.Prefix, true, cspt.handler)
 	if err != nil {
@@ -98,18 +178,27 @@ func main() {
 		fatalf("Error querying catalog: %s\n", err)
 	}
 
-	// Go through all services in the catalog, and deregister anything that
-	// should go to the local host agent.
-	for k := range svcs {
-		css, _, err := cspt.cc.Catalog().Service(k, "", &api.QueryOptions{AllowStale: true})
-		if err != nil {
-			fmt.Printf("got error querying catalog: %s\n", err)
-		}
-		for _, cs := range css {
-			if cs.ServiceAddress == cspt.me && cs.Node != cspt.node {
-				err = cspt.deregRemote(cs)
-				if err != nil {
-					fmt.Printf("got error derigstering: %s\n", err)
+	// TODO upgrade this to handle situations where a service is registered with an IP that maps to our address
+	// or an address that maps to our IP
+	if !cspt.cfg.Orphanage {
+		for k := range svcs {
+			css, _, err := cspt.cc.Catalog().Service(k, "", &api.QueryOptions{AllowStale: true})
+			if err != nil {
+				fmt.Printf("got error querying catalog: %s\n", err)
+			}
+			for _, cs := range css {
+				if entry, ok := cspt.cache[cskey(cs)]; ok && cspt.isItI(cs.Address) && cs.Node != cspt.node {
+					_, _, err = cspt.cc.Event().Fire(&api.UserEvent{
+						Name:    cspt.cfg.Prefix + "_takeover",
+						Payload: entry.sum,
+					}, nil)
+					if err != nil {
+						fmt.Printf("got error firing takeover event: %s\n", err)
+					}
+					err = cspt.deregRemote(cs)
+					if err != nil {
+						fmt.Printf("got error derigstering: %s\n", err)
+					}
 				}
 			}
 		}
@@ -121,16 +210,79 @@ func main() {
 	if err != nil {
 		fatalf("%s\n", err)
 	}
+}
 
+func (cspt *conseption) isItI(addr string) bool {
+	// first check to see if addr is an IP
+	var (
+		ips []net.IP
+		err error
+	)
+
+	if strings.ToLower(addr) == cspt.me {
+		return true
+	}
+
+	ip := net.ParseIP(addr)
+	if ip == nil {
+		ips, err = net.LookupIP(addr)
+		if err != nil {
+			return false
+		}
+	} else {
+		ips = append(ips, ip)
+	}
+	// TODO - make this a map lookup on localIPs
+	for _, lip := range cspt.localIPs {
+		for _, sip := range ips {
+			if lip.Equal(sip) {
+				return true
+			}
+		}
+	}
+	return false
+
+}
+
+func ifaces() ([]net.IP, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	var ips []net.IP
+	for _, iface := range ifaces {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return nil, err
+		}
+		for _, addr := range addrs {
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ips = append(ips, v.IP)
+			case *net.IPAddr:
+				ips = append(ips, v.IP)
+			default:
+				return nil, fmt.Errorf("unexpected address from interface %s: %s", iface.Name, addr.String())
+			}
+		}
+	}
+	return ips, nil
 }
 
 type conseption struct {
 	sync.Mutex
-	cc    *cons.Client
-	me    string
-	node  string
-	cache map[string][]byte
-	cfg   *Config
+	cc       *cons.Client
+	me       string
+	node     string
+	cache    map[string]*cacheEntry
+	cfg      *Config
+	localIPs []net.IP
+	chkid    string
+}
+
+type cacheEntry struct {
+	sum []byte
+	asr *api.AgentServiceRegistration
 }
 
 type services struct {
@@ -141,6 +293,7 @@ func (cspt *conseption) deregRemote(se *api.CatalogService) error {
 	// shallow copy of conf
 	conf := &api.Config{}
 	*conf = *cspt.cfg.ConsulConfig
+
 	// get info on the node
 	cn, _, err := cspt.cc.Catalog().Node(se.Node, &api.QueryOptions{AllowStale: true})
 	if err != nil {
@@ -159,6 +312,7 @@ func (cspt *conseption) deregRemote(se *api.CatalogService) error {
 }
 
 func (cspt *conseption) handler(idx uint64, raw interface{}) {
+
 	cspt.Lock()
 	defer cspt.Unlock()
 	kvps, ok := raw.(api.KVPairs)
@@ -179,18 +333,23 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 			}
 		}
 		for _, svc := range svcs {
-			if svc.Address == cspt.me {
+			k := askey(svc)
+			if cspt.isItI(svc.Address) {
+				k := askey(svc)
 				h := md5.Sum(kvp.Value)
-				if ch, ok := cspt.cache[svc.ID]; ok {
-					if bytes.Equal(ch, h[:]) {
+				if ch, ok := cspt.cache[k]; ok {
+					if bytes.Equal(ch.sum, h[:]) {
 						// no change
-						news[svc.ID] = false
+						news[k] = false
 						continue
 					}
 				}
-				news[svc.ID] = true
+				news[k] = true
 				regs = append(regs, svc)
-				cspt.cache[svc.ID] = h[:]
+				cspt.cache[k] = &cacheEntry{
+					sum: h[:],
+					asr: svc,
+				}
 			}
 		}
 	}
@@ -224,6 +383,18 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 			fmt.Printf("error returned from registering service: %s\n", err)
 		}
 	}
+}
+
+func askey(svc *api.AgentServiceRegistration) string {
+	id := svc.ID
+	if svc.ID == "" {
+		id = svc.Name
+	}
+	return fmt.Sprintf("%s;%s:%d", id, svc.Address, svc.Port)
+}
+
+func cskey(cs *api.CatalogService) string {
+	return fmt.Sprintf("%s;%s:%d", cs.ServiceID, cs.Address, cs.ServicePort)
 }
 
 func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
