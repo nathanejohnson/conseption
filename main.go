@@ -47,6 +47,13 @@ type Config struct {
 
 	// if true, deregister our conseption service from local agent.  defaults to true.
 	DeregOnExit bool `toml",omitempty"`
+
+	// Orphanpath -  This is where the leader key will be created if we are in orphan mode.
+	OrphanPath string
+
+	// AdvertiseAddress - in the case of a multi-homed machine in Oprhanage mode, use this
+	// to specify which address to use.  Otherwise use the first non-loopback address.
+	AdvertiseAddress string
 }
 
 func NewDefaultConfig() *Config {
@@ -59,10 +66,16 @@ func NewDefaultConfig() *Config {
 		ServiceName:  "conseption",
 		TTLInterval:  api.ReadableDuration(time.Second * 30),
 		DeregOnExit:  true,
+		OrphanPath:   "/apps/conseption/",
 	}
 }
 
 var precomma = regexp.MustCompile(`^\s*,`)
+
+const (
+	orphanage  = "orphanage"
+	localagent = "localagent"
+)
 
 func main() {
 
@@ -101,6 +114,7 @@ func main() {
 	ips, err := ifaces()
 	if err != nil {
 		fmt.Println("Error fetching interfaces:", err)
+		return
 	}
 
 	cspt := &conseption{
@@ -108,6 +122,14 @@ func main() {
 		cache:    make(map[string]*cacheEntry),
 		cfg:      cfg,
 		localIPs: ips,
+	}
+
+	if cfg.Orphanage {
+		cspt.advertiseIP, err = cspt.myIP()
+		if err != nil {
+			fmt.Println("Error determining local IP")
+			return
+		}
 	}
 
 	cspt.cc, err = cons.NewClient(cfg.ConsulConfig)
@@ -124,9 +146,9 @@ func main() {
 	}
 
 	if cspt.cfg.Orphanage {
-		asr.Tags = []string{"orphanage"}
+		asr.Tags = []string{orphanage}
 	} else {
-		asr.Tags = []string{"localagent"}
+		asr.Tags = []string{localagent}
 	}
 
 	err = cspt.cc.Agent().ServiceRegister(asr)
@@ -269,15 +291,38 @@ func ifaces() ([]net.IP, error) {
 	return ips, nil
 }
 
+func (cspt *conseption) myIP() (net.IP, error) {
+	ifs, err := ifaces()
+	if err != nil {
+		return nil, err
+	}
+	for _, iface := range ifs {
+		if cspt.cfg.AdvertiseAddress != "" {
+			if iface.String() == cspt.cfg.AdvertiseAddress {
+				return iface, nil
+			}
+			continue
+		}
+		if iface.IsLoopback() {
+			continue
+		}
+		return iface, nil
+	}
+	return nil, fmt.Errorf("no valid interfaces found")
+
+}
+
 type conseption struct {
 	sync.Mutex
-	cc       *cons.Client
-	me       string
-	node     string
-	cache    map[string]*cacheEntry
-	cfg      *Config
-	localIPs []net.IP
-	chkid    string
+	cc             *cons.Client
+	me             string
+	node           string
+	cache          map[string]*cacheEntry
+	cfg            *Config
+	localIPs       []net.IP
+	chkid          string
+	advertiseIP    net.IP
+	orphanHandlers sync.Map
 }
 
 type cacheEntry struct {
@@ -334,11 +379,12 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 				return
 			}
 		}
+	Services:
 		for _, svc := range svcs {
 			k := askey(svc)
 
 			//TODO - deregister if it's mine and
-			// someone elsehas it.
+			// someone else has it.
 			if cspt.isItI(svc.Address) {
 				h := md5.Sum(kvp.Value)
 				if ch, ok := cspt.cache[k]; ok {
@@ -355,20 +401,50 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 					asr: svc,
 				}
 			} else if cspt.cfg.Orphanage {
-				var tag string
-				if len(svc.Tags) > 0 {
-					tag = svc.Tags[0]
-				}
-				sents, _, err := cspt.cc.Health().Service(svc.Name, tag, false, qo)
+				sents, _, err := cspt.cc.ServiceByTags(svc.Name, svc.Tags, cons.TagsAll, false, qo)
+
 				if err != nil {
 					fmt.Println("Error fetching services", err)
 					continue
 				}
-				for _, sent := range matchesTags(sents, svc.Tags) {
 
+				for _, sent := range sents {
+					if sent.Service.Address == svc.Address {
+						continue Services
+					}
 				}
+				go func() {
+					var c *cons.Candidate
+					for {
+						c, err = cons.NewCandidate(cspt.cc, cspt.advertiseIP.String(),
+							fmt.Sprintf("%s:%s:%s:%d",
+								cspt.cfg.OrphanPath,
+								svc.Name,
+								svc.Address,
+								svc.Port,
+							), "")
+						if err != nil {
+							fmt.Fprint(os.Stderr, "Error creating candidate: %s\n", err)
+						} else {
+							break
+						}
+						time.Sleep(time.Second * 3)
+					}
+
+					c.Wait()
+					if c.Elected() {
+
+					}
+
+				}()
+				// TODO - perform leader election for this service
+
+				// TODO - if we are the leader, register the service
+				// TODO - if not, wait until we are the leader to register the service, deregistering the other
+
 			}
 		}
+
 	}
 	var deregs []string
 	for k := range cspt.cache {
@@ -400,32 +476,6 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 			fmt.Printf("error returned from registering service: %s\n", err)
 		}
 	}
-}
-
-// prune service entries so that the only entries returned match *all* the tags passed in.
-func matchesTags(ses []*api.ServiceEntry, tags []string) []*api.ServiceEntry {
-	var rv []*api.ServiceEntry
-
-	tagmap := make(map[string]bool)
-
-	for _, t := range tags {
-		tagmap[t] = true
-	}
-OUTER:
-	for _, se := range ses {
-		if len(tagmap) != len(se.Service.Tags) {
-			continue
-		}
-		for _, t := range se.Service.Tags {
-			if !tagmap[t] {
-				continue OUTER
-			}
-		}
-		rv = append(rv, se)
-	}
-
-	return rv
-
 }
 
 func askey(svc *api.AgentServiceRegistration) string {

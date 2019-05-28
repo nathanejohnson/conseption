@@ -1,5 +1,5 @@
 hash: 5dff15ae298ec9307315599a17fe5d95514db48d3f6684124329c506e689a47f
-updated: 2017-12-19T08:57:50.760462-06:00
+updated: 2017-12-21T16:14:15.158296-06:00
 imports:
 - name: github.com/BurntSushi/toml
   version: b26d9c308763d68093482582cea63d69be07a0f0
@@ -13,21 +13,17 @@ imports:
 - name: github.com/hashicorp/go-rootcerts
   version: 6bb64b370b90e7ef1fa532be9e591a81c3493e00
 - name: github.com/hashicorp/serf
-  version: b84a66cc5575994cb672940d244a2404141688c0
+  version: c20a0b1b1ea9eb8168bcdec0116688fa9254e449
   subpackages:
   - coordinate
 - name: github.com/mitchellh/go-homedir
   version: b8bc1bf767474819792c23f32d8286a45736f1c6
 - name: github.com/myENA/consultant
-  version: 6e161aed862f04fcf59f6bc6f403160f68563ef7
+  version: 78490399f5907fe4f356894418898d6394c25cd7
 - name: github.com/myENA/go-helpers
   version: 7d17a5f4b05cb1ecfe56203c0458e22d14fb4f45
-- name: github.com/myENA/go-stdlogger
-  version: 8db9487f39cfca4413eda7948dd5dcc3f1481dda
 - name: github.com/myENA/nodefflag
   version: f4d608864d38e1606dd1add72295ae6a491c1346
-- name: github.com/pkg/errors
-  version: c605e284fe17294bda444b34710735b29d1a9d90
 - name: github.com/renstrom/shortuuid
   version: d728e00b727de969356736fabe7c6f405347a26c
 - name: github.com/satori/go.uuid
