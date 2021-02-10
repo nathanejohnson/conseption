@@ -270,7 +270,7 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 			b := buf.Bytes()
 			m := precomma.FindIndex(b)
 			if m == nil {
-				sumOfAllErrs = multierror.Append(sumOfAllErrs, fmt.Errorf("bad read: %s\n", string(b)))
+				sumOfAllErrs = multierror.Append(sumOfAllErrs, fmt.Errorf("bad read: %s", string(b)))
 				break
 			}
 
@@ -285,7 +285,7 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 				if err == io.EOF {
 					err = nil
 				} else {
-					sumOfAllErrs = multierror.Append(sumOfAllErrs, fmt.Errorf("got final error: %w\n", err))
+					sumOfAllErrs = multierror.Append(sumOfAllErrs, fmt.Errorf("got final error: %w", err))
 				}
 				break
 			}
