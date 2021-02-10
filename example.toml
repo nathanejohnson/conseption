@@ -1,3 +1,7 @@
 Prefix = "/servicesblah"
 Orphan = true
 ConsulPort = 8500
+
+[Log]
+Level = "debug"
+Mode = "console" # "console" or "json"
