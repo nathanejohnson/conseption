@@ -12,11 +12,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/BurntSushi/toml"
 	"github.com/hashicorp/consul/api"
-	cons "github.com/myENA/consultant"
+	"github.com/hashicorp/go-multierror"
+	cons "github.com/myENA/consultant/v2"
 	ndf "github.com/myENA/nodefflag"
 	"github.com/nathanejohnson/conseption/putbackreader"
+	"github.com/pelletier/go-toml"
 )
 
 type Config struct {
@@ -39,10 +40,10 @@ var precomma = regexp.MustCompile(`^\s*,`)
 func main() {
 
 	flags := ndf.NewNDFlagSet(os.Args[0], flag.ExitOnError)
-	conf := flags.NDString("config", "path to toml config file - optional")
-	orphan := flags.NDBool("orphan", "orphan mode - default false")
-	prefix := flags.NDString("prefix", "prefix to watch for service regs - default /services")
-	cport := flags.NDInt("consulport", "tcp port for remote consul connections")
+	conf := flags.NDString("config", "example.toml", "path to toml config file - optional")
+	orphan := flags.NDBool("orphan", true, "orphan mode - default false")
+	prefix := flags.NDString("prefix", "/services", "prefix to watch for service regs - default /services")
+	cport := flags.NDInt("consulport", 8500, "tcp port for remote consul connections")
 	err := flags.Parse(os.Args[1:])
 	if err != nil {
 		fatalf(err.Error())
@@ -50,9 +51,12 @@ func main() {
 
 	cfg := NewDefaultConfig()
 	if *conf != nil {
-		_, err = toml.DecodeFile(**conf, cfg)
+		tree, err := toml.LoadFile(**conf)
 		if err != nil {
-			fatalf(err.Error())
+			fatalf("error loading config file %q: %v", **conf, err)
+		}
+		if err := tree.Unmarshal(cfg); err != nil {
+			fatalf("error unmarshalling file %q: %v", **conf, err)
 		}
 	}
 	if *orphan != nil {
@@ -161,9 +165,12 @@ func (cspt *conseption) deregRemote(se *api.CatalogService) error {
 func (cspt *conseption) handler(idx uint64, raw interface{}) {
 	cspt.Lock()
 	defer cspt.Unlock()
-	kvps, ok := raw.(api.KVPairs)
 	var regs []*api.AgentServiceRegistration
+
+	// ensure we have kvpairs
+	kvps, ok := raw.(api.KVPairs)
 	if !ok {
+
 		fmt.Println("not KVPairs!")
 		return
 	}
@@ -227,18 +234,18 @@ func (cspt *conseption) handler(idx uint64, raw interface{}) {
 }
 
 func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
-	var errors []string
-	var err error
+	// by the end of his func, this will either be nil or an *multierr.Error
+	var sumOfAllErrs error
+
 	// Try services struct
 	ss := &services{}
-	err = json.Unmarshal(val, ss)
-	if err == nil {
+
+	if err := json.Unmarshal(val, ss); err == nil {
 		return ss.Services, nil
 	}
 
 	// now try a list
-	err = json.Unmarshal(val, &ss.Services)
-	if err == nil {
+	if err := json.Unmarshal(val, &ss.Services); err == nil {
 		return ss.Services, nil
 	}
 
@@ -249,7 +256,7 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 
 	for {
 		asr := &api.AgentServiceRegistration{}
-		err = jd.Decode(asr)
+		err := jd.Decode(asr)
 
 		if err != nil {
 			if err == io.EOF {
@@ -263,7 +270,7 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 			b := buf.Bytes()
 			m := precomma.FindIndex(b)
 			if m == nil {
-				errors = append(errors, fmt.Sprintf("bad read: %s\n", string(b)))
+				sumOfAllErrs = multierror.Append(sumOfAllErrs, fmt.Errorf("bad read: %s", string(b)))
 				break
 			}
 
@@ -278,7 +285,7 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 				if err == io.EOF {
 					err = nil
 				} else {
-					errors = append(errors, fmt.Sprintf("got final error: %s\n", err))
+					sumOfAllErrs = multierror.Append(sumOfAllErrs, fmt.Errorf("got final error: %w", err))
 				}
 				break
 			}
@@ -290,10 +297,7 @@ func parseServiceRegs(val []byte) ([]*api.AgentServiceRegistration, error) {
 		}
 	}
 
-	if len(errors) > 0 {
-		err = fmt.Errorf("Errors: %s", strings.Join(errors, ","))
-	}
-	return ss.Services, err
+	return ss.Services, sumOfAllErrs
 }
 
 func (cspt *conseption) deregisterAllLocalServices() error {
@@ -317,6 +321,6 @@ func (cspt *conseption) deregisterAllLocalServices() error {
 }
 
 func fatalf(format string, args ...interface{}) {
-	fmt.Printf(format, args)
+	fmt.Printf(format, args...)
 	os.Exit(1)
 }
